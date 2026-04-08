@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS = {
   useOvertimePremium: true,
   useNightPremium: true,
   taxRate: 3.3,
-  defaultHourlyWage: 11000,
+  defaultHourlyWage: 10320,
   autoFillMissing: true,
   defaultMissingHours: 8,
   defaultStartTime: "09:00",
@@ -38,6 +38,8 @@ const state = {
   selectedEmployee: "",
 };
 
+applyDefaultWageMigration();
+
 const wonFormatter = new Intl.NumberFormat("ko-KR");
 
 const dom = {
@@ -48,10 +50,6 @@ const dom = {
   recalculateBtn: document.getElementById("recalculateBtn"),
   uploadStatus: document.getElementById("uploadStatus"),
 
-  useWeeklyHolidayInput: document.getElementById("useWeeklyHolidayInput"),
-  useHolidayPremiumInput: document.getElementById("useHolidayPremiumInput"),
-  useOvertimePremiumInput: document.getElementById("useOvertimePremiumInput"),
-  useNightPremiumInput: document.getElementById("useNightPremiumInput"),
   taxRateInput: document.getElementById("taxRateInput"),
   defaultHourlyWageInput: document.getElementById("defaultHourlyWageInput"),
   autoFillMissingInput: document.getElementById("autoFillMissingInput"),
@@ -67,6 +65,7 @@ const dom = {
   holidayList: document.getElementById("holidayList"),
 
   employeeSettingsBody: document.getElementById("employeeSettingsBody"),
+  missingDetectedBody: document.getElementById("missingDetectedBody"),
 
   missingEmployeeSelect: document.getElementById("missingEmployeeSelect"),
   missingEmployeeName: document.getElementById("missingEmployeeName"),
@@ -106,6 +105,7 @@ function init() {
   renderMonthOptions();
   renderEmployeeSelectors();
   renderEmployeeSettingsTable();
+  renderDetectedMissingTable();
   renderPreview();
   renderStatement();
   renderSummary();
@@ -121,6 +121,7 @@ function bindEvents() {
   dom.fileInput.addEventListener("change", handleFileUpload);
   dom.monthSelect.addEventListener("change", () => {
     state.selectedMonth = dom.monthSelect.value;
+    renderDetectedMissingTable();
     renderStatement();
     renderSummary();
   });
@@ -145,7 +146,9 @@ function bindEvents() {
   });
 
   dom.employeeSettingsBody.addEventListener("input", handleEmployeeSettingChange);
+  dom.employeeSettingsBody.addEventListener("click", handleEmployeeSettingAction);
   dom.addMissingShiftBtn.addEventListener("click", addMissingShift);
+  dom.missingDetectedBody.addEventListener("click", handleDetectedMissingAction);
 
   dom.statementEmployeeSelect.addEventListener("change", () => {
     state.selectedEmployee = dom.statementEmployeeSelect.value;
@@ -161,11 +164,12 @@ function bindEvents() {
       const input = target;
       const entryId = input.dataset.id;
       if (!entryId) return;
-      const value = toNumber(input.value, NaN);
+      const value = parseDurationInput(input.value);
       if (!Number.isFinite(value) || value < 0) return;
       const entry = state.entries.find((item) => item.id === entryId);
       if (!entry) return;
       entry.adjustedHours = round2(value);
+      entry.reportedHours = round2(value);
       entry.isAdjustedManually = true;
       renderStatement();
       renderSummary();
@@ -187,13 +191,7 @@ function bindEvents() {
 }
 
 function bindSettingListeners() {
-  const checkboxBindings = [
-    ["useWeeklyHolidayInput", "useWeeklyHoliday"],
-    ["useHolidayPremiumInput", "useHolidayPremium"],
-    ["useOvertimePremiumInput", "useOvertimePremium"],
-    ["useNightPremiumInput", "useNightPremium"],
-    ["autoFillMissingInput", "autoFillMissing"],
-  ];
+  const checkboxBindings = [["autoFillMissingInput", "autoFillMissing"]];
   checkboxBindings.forEach(([inputId, settingKey]) => {
     dom[inputId].addEventListener("change", () => {
       state.settings[settingKey] = dom[inputId].checked;
@@ -236,10 +234,6 @@ function bindSettingListeners() {
 }
 
 function hydrateSettingInputs() {
-  dom.useWeeklyHolidayInput.checked = Boolean(state.settings.useWeeklyHoliday);
-  dom.useHolidayPremiumInput.checked = Boolean(state.settings.useHolidayPremium);
-  dom.useOvertimePremiumInput.checked = Boolean(state.settings.useOvertimePremium);
-  dom.useNightPremiumInput.checked = Boolean(state.settings.useNightPremium);
   dom.taxRateInput.value = String(state.settings.taxRate);
   dom.defaultHourlyWageInput.value = String(state.settings.defaultHourlyWage);
   dom.autoFillMissingInput.checked = Boolean(state.settings.autoFillMissing);
@@ -273,7 +267,7 @@ async function handleFileUpload(event) {
     state.selectedEmployee = getEmployeesInMonth(state.selectedMonth)[0] || "";
     renderEverything();
     setStatus(
-      `${parsedEntries.length}건을 불러왔습니다. 정산시간은 근무자별 화면에서 직접 수정 가능합니다.`
+      `${parsedEntries.length}건을 불러왔습니다. 누락 기록 자동 감지 표와 근무자 정산서에서 시간을 바로 수정할 수 있습니다.`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "파일을 읽는 중 오류가 발생했습니다.";
@@ -561,9 +555,36 @@ function handleEmployeeSettingChange(event) {
   if (target.classList.contains("night-start-input")) {
     config.nightStart = target.value || state.settings.defaultNightStart;
   }
+  if (target.classList.contains("employee-allowance-toggle")) {
+    const key = target.dataset.key;
+    if (key) {
+      config[key] = target.checked;
+    }
+  }
   persistConfig();
   renderStatement();
   renderSummary();
+}
+
+function handleEmployeeSettingAction(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  if (!target.classList.contains("delete-employee-btn")) return;
+  const name = target.dataset.name;
+  if (!name) return;
+
+  const beforeCount = state.entries.length;
+  state.entries = state.entries.filter((entry) => entry.name !== name);
+  delete state.employeeSettings[name];
+
+  if (beforeCount === state.entries.length) {
+    setStatus("삭제할 근무자 데이터가 없습니다.", true);
+    renderEverything();
+    return;
+  }
+
+  setStatus(`${name} 근무자 데이터를 삭제했습니다.`);
+  renderEverything();
 }
 
 function renderEverything() {
@@ -580,6 +601,7 @@ function renderEverything() {
   renderMonthOptions();
   renderEmployeeSelectors();
   renderEmployeeSettingsTable();
+  renderDetectedMissingTable();
   renderPreview();
   renderStatement();
   renderSummary();
@@ -622,7 +644,7 @@ function renderEmployeeSettingsTable() {
   const employees = getEmployees();
   if (!employees.length) {
     dom.employeeSettingsBody.innerHTML =
-      '<tr><td colspan="4" class="empty">업로드 후 자동 생성됩니다.</td></tr>';
+      '<tr><td colspan="9" class="empty">업로드 후 자동 생성됩니다.</td></tr>';
     return;
   }
 
@@ -642,9 +664,157 @@ function renderEmployeeSettingsTable() {
         <td>
           <input class="night-start-input" data-name="${escapeHtml(name)}" type="time" value="${config.nightStart}" />
         </td>
+        <td>
+          <label class="switch compact-switch">
+            <input class="employee-allowance-toggle" data-key="useWeeklyHoliday" data-name="${escapeHtml(
+              name
+            )}" type="checkbox" ${config.useWeeklyHoliday ? "checked" : ""} />
+          </label>
+        </td>
+        <td>
+          <label class="switch compact-switch">
+            <input class="employee-allowance-toggle" data-key="useHolidayPremium" data-name="${escapeHtml(
+              name
+            )}" type="checkbox" ${config.useHolidayPremium ? "checked" : ""} />
+          </label>
+        </td>
+        <td>
+          <label class="switch compact-switch">
+            <input class="employee-allowance-toggle" data-key="useOvertimePremium" data-name="${escapeHtml(
+              name
+            )}" type="checkbox" ${config.useOvertimePremium ? "checked" : ""} />
+          </label>
+        </td>
+        <td>
+          <label class="switch compact-switch">
+            <input class="employee-allowance-toggle" data-key="useNightPremium" data-name="${escapeHtml(
+              name
+            )}" type="checkbox" ${config.useNightPremium ? "checked" : ""} />
+          </label>
+        </td>
+        <td>
+          <button class="btn secondary small-btn delete-employee-btn" data-name="${escapeHtml(
+            name
+          )}" type="button">삭제</button>
+        </td>
       </tr>`;
     })
     .join("");
+}
+
+function renderDetectedMissingTable() {
+  const targets = getDetectedMissingEntries();
+  if (!targets.length) {
+    dom.missingDetectedBody.innerHTML =
+      '<tr><td colspan="7" class="empty">누락 감지 항목이 없습니다.</td></tr>';
+    return;
+  }
+
+  dom.missingDetectedBody.innerHTML = targets
+    .map((entry) => {
+      const statusParts = [];
+      if (entry.missingStart) statusParts.push("출근 누락");
+      if (entry.missingEnd) statusParts.push("퇴근 누락");
+      if (!statusParts.length) statusParts.push("시간 보정");
+      return `<tr>
+        <td>${escapeHtml(entry.name)}</td>
+        <td>${formatDateWithDay(entry.workDate)}</td>
+        <td>${statusParts.join(" / ")}</td>
+        <td>
+          <input class="missing-fix-start" data-id="${entry.id}" type="time" value="${
+            entry.originalStartIso ? formatTimeFromIso(entry.originalStartIso) : ""
+          }" />
+        </td>
+        <td>
+          <input class="missing-fix-end" data-id="${entry.id}" type="time" value="${
+            entry.originalEndIso ? formatTimeFromIso(entry.originalEndIso) : ""
+          }" />
+        </td>
+        <td>
+          <input class="missing-fix-hours" data-id="${entry.id}" type="text" placeholder="예: 8시간 30분" value="${formatDurationText(
+            entry.adjustedHours
+          )}" />
+        </td>
+        <td>
+          <button class="btn secondary small-btn apply-missing-fix-btn" data-id="${entry.id}" type="button">적용</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function getDetectedMissingEntries() {
+  return state.entries
+    .filter((entry) => entry.source === "excel" && (entry.missingStart || entry.missingEnd))
+    .filter((entry) => !state.selectedMonth || entry.workDate.startsWith(state.selectedMonth))
+    .sort(compareEntries);
+}
+
+function handleDetectedMissingAction(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  if (!target.classList.contains("apply-missing-fix-btn")) return;
+  const entryId = target.dataset.id;
+  if (!entryId) return;
+
+  const entry = state.entries.find((item) => item.id === entryId);
+  if (!entry) return;
+
+  const startInput = dom.missingDetectedBody.querySelector(`.missing-fix-start[data-id="${entryId}"]`);
+  const endInput = dom.missingDetectedBody.querySelector(`.missing-fix-end[data-id="${entryId}"]`);
+  const hoursInput = dom.missingDetectedBody.querySelector(`.missing-fix-hours[data-id="${entryId}"]`);
+  if (!(startInput instanceof HTMLInputElement)) return;
+  if (!(endInput instanceof HTMLInputElement)) return;
+  if (!(hoursInput instanceof HTMLInputElement)) return;
+
+  const day = parseDateOnly(entry.workDate);
+  if (!day) return;
+
+  const startRaw = startInput.value.trim();
+  const endRaw = endInput.value.trim();
+  const hoursRaw = hoursInput.value.trim();
+
+  let nextStart = startRaw ? combineDateAndTime(day, startRaw) : parseDateTimeKey(entry.originalStartIso);
+  let nextEnd = endRaw ? combineDateAndTime(day, endRaw) : parseDateTimeKey(entry.originalEndIso);
+  const durationHours = parseDurationInput(hoursRaw);
+
+  if (!nextStart && !nextEnd && !Number.isFinite(durationHours)) {
+    setStatus("보정할 값을 하나 이상 입력하세요.", true);
+    return;
+  }
+
+  if (nextStart && nextEnd && nextEnd <= nextStart) {
+    nextEnd = addDays(nextEnd, 1);
+  }
+
+  const replaced = normalizeShift({
+    id: entry.id,
+    source: entry.source,
+    name: entry.name,
+    category: entry.category,
+    workDate: entry.workDate,
+    start: nextStart,
+    end: nextEnd,
+    reportedHours: Number.isFinite(durationHours) ? durationHours : entry.reportedHours,
+    note: entry.note || "누락 보정",
+    isAdjustedManually: Number.isFinite(durationHours),
+  });
+
+  if (Number.isFinite(durationHours)) {
+    replaced.adjustedHours = round2(durationHours);
+    replaced.isAdjustedManually = true;
+  } else if (entry.isAdjustedManually) {
+    replaced.adjustedHours = entry.adjustedHours;
+    replaced.isAdjustedManually = true;
+  }
+
+  const idx = state.entries.findIndex((item) => item.id === entryId);
+  if (idx >= 0) {
+    state.entries[idx] = replaced;
+    state.entries.sort(compareEntries);
+    setStatus(`${entry.name} ${formatDateForDisplay(entry.workDate)} 누락 기록을 보정했습니다.`);
+    renderEverything();
+  }
 }
 
 function renderPreview() {
@@ -663,7 +833,7 @@ function renderPreview() {
         <td>${escapeHtml(entry.category || "-")}</td>
         <td>${entry.startIso ? formatTimeFromIso(entry.startIso) : "-"}</td>
         <td>${entry.endIso ? formatTimeFromIso(entry.endIso) : "-"}</td>
-        <td>${formatHours(entry.adjustedHours)}시간</td>
+        <td>${formatDurationText(entry.adjustedHours)}</td>
         <td>${escapeHtml(entry.note || "-")}</td>
       </tr>`;
     })
@@ -712,9 +882,9 @@ function renderStatement() {
         <td>${formatDateWithDay(shift.entry.workDate)}</td>
         <td>${shift.entry.startIso ? formatTimeFromIso(shift.entry.startIso) : "-"}</td>
         <td>${shift.entry.endIso ? formatTimeFromIso(shift.entry.endIso) : "-"}</td>
-        <td>${formatHours(shift.clockHours)}시간</td>
+        <td>${formatDurationText(shift.entry.adjustedHours)}</td>
         <td>
-          <input class="hour-editor" data-id="${shift.entry.id}" type="number" min="0" step="0.1" value="${formatHourInput(
+          <input class="hour-editor" data-id="${shift.entry.id}" type="text" value="${formatDurationText(
             shift.entry.adjustedHours
           )}" />
         </td>
@@ -738,7 +908,7 @@ function renderStatement() {
           week.overtimePremium + week.nightPremium + week.holidayPremium + week.weeklyHolidayPay;
         return `<tr>
           <td>${week.weekIndex}주차</td>
-          <td>${formatHours(week.hours)}시간</td>
+          <td>${formatDurationText(week.hours)}</td>
           <td>${week.workDays}</td>
           <td>${formatWon(week.basePay)}</td>
           <td>${formatWon(premiumSum)}</td>
@@ -748,7 +918,7 @@ function renderStatement() {
       .join("");
   }
 
-  dom.totalHoursCell.textContent = `${formatHours(payroll.totals.hours)}시간`;
+  dom.totalHoursCell.textContent = formatDurationText(payroll.totals.hours);
   dom.basePayCell.textContent = formatWon(payroll.totals.basePay);
   dom.allowanceCell.textContent = formatWon(payroll.totals.allowances);
   dom.grossPayCell.textContent = formatWon(payroll.totals.grossPay);
@@ -756,7 +926,7 @@ function renderStatement() {
 }
 
 function renderTotalsEmpty() {
-  dom.totalHoursCell.textContent = "0.00시간";
+  dom.totalHoursCell.textContent = "0시간 0분";
   dom.basePayCell.textContent = "₩0";
   dom.allowanceCell.textContent = "₩0";
   dom.grossPayCell.textContent = "₩0";
@@ -766,7 +936,7 @@ function renderTotalsEmpty() {
 function renderSummary() {
   if (!state.selectedMonth) {
     dom.summaryBody.innerHTML = '<tr><td colspan="4" class="empty">정산할 데이터가 없습니다.</td></tr>';
-    dom.summaryTotalHours.textContent = "0.00시간";
+    dom.summaryTotalHours.textContent = "0시간 0분";
     dom.summaryTotalGross.textContent = "₩0";
     dom.summaryTotalNet.textContent = "₩0";
     return;
@@ -775,7 +945,7 @@ function renderSummary() {
   const employees = getEmployeesInMonth(state.selectedMonth);
   if (!employees.length) {
     dom.summaryBody.innerHTML = '<tr><td colspan="4" class="empty">정산할 데이터가 없습니다.</td></tr>';
-    dom.summaryTotalHours.textContent = "0.00시간";
+    dom.summaryTotalHours.textContent = "0시간 0분";
     dom.summaryTotalGross.textContent = "₩0";
     dom.summaryTotalNet.textContent = "₩0";
     return;
@@ -792,7 +962,7 @@ function renderSummary() {
     .map(
       ({ name, payroll }) => `<tr>
       <td>${escapeHtml(name)}</td>
-      <td>${formatHours(payroll.totals.hours)}시간</td>
+      <td>${formatDurationText(payroll.totals.hours)}</td>
       <td>${formatWon(payroll.totals.grossPay)}</td>
       <td>${formatWon(payroll.totals.netPay)}</td>
     </tr>`
@@ -809,7 +979,7 @@ function renderSummary() {
     { hours: 0, gross: 0, net: 0 }
   );
 
-  dom.summaryTotalHours.textContent = `${formatHours(totals.hours)}시간`;
+  dom.summaryTotalHours.textContent = formatDurationText(totals.hours);
   dom.summaryTotalGross.textContent = formatWon(totals.gross);
   dom.summaryTotalNet.textContent = formatWon(totals.net);
 }
@@ -820,7 +990,7 @@ function computeEmployeeMonthPayroll(name, month) {
 
   const shifts = state.entries
     .filter((entry) => entry.name === name && entry.workDate.startsWith(month))
-    .map((entry) => computeShiftPayroll(entry, hourlyRate, config.nightStart))
+    .map((entry) => computeShiftPayroll(entry, hourlyRate, config))
     .sort((a, b) => compareEntries(a.entry, b.entry));
 
   const weekMap = new Map();
@@ -849,7 +1019,7 @@ function computeEmployeeMonthPayroll(name, month) {
     }
   });
 
-  if (state.settings.useWeeklyHoliday) {
+  if (config.useWeeklyHoliday) {
     weekMap.forEach((week) => {
       const workDays = week.daySet.size;
       const threshold = Math.max(0, toNumber(state.settings.weeklyThresholdHours, 15));
@@ -911,21 +1081,26 @@ function computeEmployeeMonthPayroll(name, month) {
   };
 }
 
-function computeShiftPayroll(entry, hourlyRate, nightStart) {
+function computeShiftPayroll(entry, hourlyRate, config) {
   const adjustedHours = Math.max(0, toNumber(entry.adjustedHours, 0));
   const start = parseDateTimeKey(entry.startIso);
   const end = parseDateTimeKey(entry.endIso);
   const clockHours = start && end ? Math.max(0, diffHours(start, end)) : 0;
   const ratio = clockHours > 0 ? adjustedHours / clockHours : 1;
 
-  const overtimeHours = state.settings.useOvertimePremium ? Math.max(0, adjustedHours - 8) : 0;
+  const overtimeHours = config.useOvertimePremium ? Math.max(0, adjustedHours - 8) : 0;
   const rawNightHours =
-    state.settings.useNightPremium && start && end
-      ? calculateNightHours(start, end, nightStart || state.settings.defaultNightStart, state.settings.nightEndTime)
+    config.useNightPremium && start && end
+      ? calculateNightHours(
+          start,
+          end,
+          config.nightStart || state.settings.defaultNightStart,
+          state.settings.nightEndTime
+        )
       : 0;
   const nightHours = Math.min(adjustedHours, rawNightHours * ratio);
   const isHolidayDate = isOfficialHolidayDate(entry.workDate);
-  const holidayHours = state.settings.useHolidayPremium && isHolidayDate ? adjustedHours : 0;
+  const holidayHours = config.useHolidayPremium && isHolidayDate ? adjustedHours : 0;
 
   const basePay = adjustedHours * hourlyRate;
   const overtimePremium = overtimeHours * hourlyRate * 0.5;
@@ -1041,6 +1216,10 @@ function ensureEmployeeSetting(name) {
     state.employeeSettings[name] = {
       hourlyRate: Math.max(0, toNumber(state.settings.defaultHourlyWage, 0)),
       nightStart: state.settings.defaultNightStart,
+      useWeeklyHoliday: Boolean(state.settings.useWeeklyHoliday),
+      useHolidayPremium: Boolean(state.settings.useHolidayPremium),
+      useOvertimePremium: Boolean(state.settings.useOvertimePremium),
+      useNightPremium: Boolean(state.settings.useNightPremium),
     };
   }
   if (!state.employeeSettings[name].nightStart) {
@@ -1048,6 +1227,18 @@ function ensureEmployeeSetting(name) {
   }
   if (!Number.isFinite(toNumber(state.employeeSettings[name].hourlyRate, NaN))) {
     state.employeeSettings[name].hourlyRate = state.settings.defaultHourlyWage;
+  }
+  if (typeof state.employeeSettings[name].useWeeklyHoliday !== "boolean") {
+    state.employeeSettings[name].useWeeklyHoliday = Boolean(state.settings.useWeeklyHoliday);
+  }
+  if (typeof state.employeeSettings[name].useHolidayPremium !== "boolean") {
+    state.employeeSettings[name].useHolidayPremium = Boolean(state.settings.useHolidayPremium);
+  }
+  if (typeof state.employeeSettings[name].useOvertimePremium !== "boolean") {
+    state.employeeSettings[name].useOvertimePremium = Boolean(state.settings.useOvertimePremium);
+  }
+  if (typeof state.employeeSettings[name].useNightPremium !== "boolean") {
+    state.employeeSettings[name].useNightPremium = Boolean(state.settings.useNightPremium);
   }
   return state.employeeSettings[name];
 }
@@ -1237,8 +1428,39 @@ function formatHours(value) {
   return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
 }
 
-function formatHourInput(value) {
-  return round2(toNumber(value, 0)).toFixed(2);
+function formatDurationText(value) {
+  const totalMinutes = Math.max(0, Math.round(toNumber(value, 0) * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}시간 ${minutes}분`;
+}
+
+function parseDurationInput(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return NaN;
+
+  const direct = toNumber(text, NaN);
+  if (Number.isFinite(direct)) return round2(direct);
+
+  const hhmmMatch = /^(\d{1,3})\s*:\s*(\d{1,2})$/.exec(text);
+  if (hhmmMatch) {
+    const hours = toNumber(hhmmMatch[1], 0);
+    const minutes = toNumber(hhmmMatch[2], 0);
+    return round2(hours + minutes / 60);
+  }
+
+  const hourMinuteMatch = /(?:(\d+(?:\.\d+)?)\s*시간)?\s*(?:(\d{1,2})\s*분)?/.exec(text);
+  if (hourMinuteMatch) {
+    const hasHour = hourMinuteMatch[1] !== undefined;
+    const hasMinute = hourMinuteMatch[2] !== undefined;
+    if (hasHour || hasMinute) {
+      const hours = toNumber(hourMinuteMatch[1], 0);
+      const minutes = toNumber(hourMinuteMatch[2], 0);
+      return round2(hours + minutes / 60);
+    }
+  }
+
+  return NaN;
 }
 
 function formatWon(value) {
@@ -1314,6 +1536,23 @@ function pad2(number) {
 function setStatus(message, isError = false) {
   dom.uploadStatus.textContent = message;
   dom.uploadStatus.classList.toggle("text-danger", isError);
+}
+
+function applyDefaultWageMigration() {
+  let changed = false;
+  if (toNumber(state.settings.defaultHourlyWage, NaN) === 11000) {
+    state.settings.defaultHourlyWage = 10320;
+    changed = true;
+  }
+  Object.values(state.employeeSettings).forEach((config) => {
+    if (toNumber(config.hourlyRate, NaN) === 11000) {
+      config.hourlyRate = 10320;
+      changed = true;
+    }
+  });
+  if (changed) {
+    persistConfig();
+  }
 }
 
 function persistConfig() {

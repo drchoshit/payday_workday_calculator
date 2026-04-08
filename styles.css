@@ -265,6 +265,10 @@ select:focus {
   accent-color: var(--blue-600);
 }
 
+.compact-switch {
+  justify-content: center;
+}
+
 .chip-wrap {
   display: flex;
   flex-wrap: wrap;
@@ -319,9 +323,20 @@ select:focus {
 }
 
 .table input[type="number"],
-.table input[type="time"] {
+.table input[type="time"],
+.table input[type="text"] {
   font-size: 12px;
   padding: 6px 6px;
+}
+
+.table .hour-editor,
+.table .missing-fix-hours {
+  min-width: 110px;
+}
+
+.small-btn {
+  padding: 6px 10px;
+  font-size: 12px;
 }
 
 .scroll-x {

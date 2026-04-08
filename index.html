@@ -64,27 +64,9 @@
 
             <article class="card">
               <div class="card-head">
-                <h2>수당 적용 선택</h2>
+                <h2>정산 기본 설정</h2>
               </div>
               <div class="card-body">
-                <div class="toggle-grid">
-                  <label class="switch">
-                    <input id="useWeeklyHolidayInput" type="checkbox" checked />
-                    <span>주휴수당 적용</span>
-                  </label>
-                  <label class="switch">
-                    <input id="useHolidayPremiumInput" type="checkbox" checked />
-                    <span>공휴일수당 적용(일요일 제외)</span>
-                  </label>
-                  <label class="switch">
-                    <input id="useOvertimePremiumInput" type="checkbox" checked />
-                    <span>연장근무수당 적용(1일 8시간 초과)</span>
-                  </label>
-                  <label class="switch">
-                    <input id="useNightPremiumInput" type="checkbox" checked />
-                    <span>야간수당 적용</span>
-                  </label>
-                </div>
                 <div class="inline-fields">
                   <label class="field">
                     <span>세율(%)</span>
@@ -100,6 +82,9 @@
                     />
                   </label>
                 </div>
+                <p class="hint">
+                  수당 적용 여부는 아래 근무자 설정 표에서 근무자별로 체크합니다.
+                </p>
               </div>
             </article>
 
@@ -145,6 +130,9 @@
                     <input id="weeklyMultiplierInput" type="number" min="0" step="0.1" />
                   </label>
                 </div>
+                <p class="hint">
+                  주휴 가중치는 계산된 주휴시간에 곱해지는 비율입니다. `1`은 기본, `0.5`는 절반, `1.2`는 20% 추가 반영입니다.
+                </p>
               </div>
             </article>
 
@@ -182,11 +170,45 @@
                     <th>카테고리</th>
                     <th>시급(원)</th>
                     <th>야간 시작(개인)</th>
+                    <th>주휴</th>
+                    <th>공휴일</th>
+                    <th>연장</th>
+                    <th>야간</th>
+                    <th>삭제</th>
                   </tr>
                 </thead>
                 <tbody id="employeeSettingsBody">
                   <tr>
-                    <td colspan="4" class="empty">업로드 후 자동 생성됩니다.</td>
+                    <td colspan="9" class="empty">업로드 후 자동 생성됩니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>누락 기록 자동 감지</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <p class="hint">
+                엑셀에서 출근/퇴근이 비어 있거나 누락 보정된 행을 먼저 보여줍니다. 아래에서 바로 시간 보정 후 적용하세요.
+              </p>
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>근무일</th>
+                    <th>현재 상태</th>
+                    <th>출근 보정</th>
+                    <th>퇴근 보정</th>
+                    <th>근무시간 보정</th>
+                    <th>적용</th>
+                  </tr>
+                </thead>
+                <tbody id="missingDetectedBody">
+                  <tr>
+                    <td colspan="7" class="empty">누락 감지 항목이 없습니다.</td>
                   </tr>
                 </tbody>
               </table>
@@ -295,7 +317,7 @@
                       <th>출근</th>
                       <th>퇴근</th>
                       <th>기록시간</th>
-                      <th>정산시간(수정 가능)</th>
+                      <th>정산시간</th>
                       <th>기본급</th>
                       <th>연장</th>
                       <th>야간</th>
