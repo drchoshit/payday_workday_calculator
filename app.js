@@ -33,9 +33,9 @@ const state = {
   settings: { ...DEFAULT_SETTINGS, ...(persisted.settings || {}) },
   holidays: sanitizeHolidayList(persisted.holidays || []),
   employeeSettings: persisted.employeeSettings || {},
-  entries: [],
-  selectedMonth: "",
-  selectedEmployee: "",
+  entries: normalizePersistedEntries(persisted.entries || []),
+  selectedMonth: cleanText(persisted.selectedMonth || ""),
+  selectedEmployee: cleanText(persisted.selectedEmployee || ""),
 };
 
 applyDefaultWageMigration();
@@ -121,6 +121,7 @@ function bindEvents() {
   dom.fileInput.addEventListener("change", handleFileUpload);
   dom.monthSelect.addEventListener("change", () => {
     state.selectedMonth = dom.monthSelect.value;
+    persistConfig();
     renderDetectedMissingTable();
     renderStatement();
     renderSummary();
@@ -152,6 +153,7 @@ function bindEvents() {
 
   dom.statementEmployeeSelect.addEventListener("change", () => {
     state.selectedEmployee = dom.statementEmployeeSelect.value;
+    persistConfig();
     renderStatement();
   });
 
@@ -171,6 +173,7 @@ function bindEvents() {
       entry.adjustedHours = round2(value);
       entry.reportedHours = round2(value);
       entry.isAdjustedManually = true;
+      persistConfig();
       renderStatement();
       renderSummary();
     }
@@ -261,13 +264,23 @@ async function handleFileUpload(event) {
   setStatus(`"${file.name}" 분석 중입니다...`);
   try {
     const parsedEntries = await parseWorkEntries(file);
-    state.entries = parsedEntries;
-    state.selectedMonth = getAvailableMonths().slice(-1)[0] || "";
+    const uploadedMonths = Array.from(
+      new Set(parsedEntries.map((entry) => entry.workDate.slice(0, 7)))
+    ).sort();
+    const keepEntries = state.entries.filter((entry) => {
+      const month = entry.workDate.slice(0, 7);
+      if (!uploadedMonths.includes(month)) return true;
+      return entry.source === "manual";
+    });
+    state.entries = keepEntries.concat(parsedEntries).sort(compareEntries);
+    state.selectedMonth = uploadedMonths.slice(-1)[0] || getAvailableMonths().slice(-1)[0] || "";
     syncEmployeeSettings();
     state.selectedEmployee = getEmployeesInMonth(state.selectedMonth)[0] || "";
     renderEverything();
     setStatus(
-      `${parsedEntries.length}건을 불러왔습니다. 누락 기록 자동 감지 표와 근무자 정산서에서 시간을 바로 수정할 수 있습니다.`
+      `${parsedEntries.length}건을 불러왔고, ${uploadedMonths.join(
+        ", "
+      )} 월 데이터는 갱신했습니다. 다른 월 데이터는 유지됩니다.`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "파일을 읽는 중 오류가 발생했습니다.";
@@ -1529,6 +1542,52 @@ function cleanText(value) {
     .trim();
 }
 
+function normalizePersistedEntries(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((entry, index) => normalizePersistedEntry(entry, index))
+    .filter(Boolean)
+    .sort(compareEntries);
+}
+
+function normalizePersistedEntry(raw, index) {
+  if (!raw || typeof raw !== "object") return null;
+  const workDate = cleanText(raw.workDate);
+  const name = cleanText(raw.name);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate) || !name) return null;
+
+  const reportedHoursNum = toNumber(raw.reportedHours, NaN);
+  const adjustedHoursNum = toNumber(raw.adjustedHours, NaN);
+  const baseHours = Number.isFinite(adjustedHoursNum)
+    ? adjustedHoursNum
+    : Number.isFinite(reportedHoursNum)
+      ? reportedHoursNum
+      : DEFAULT_SETTINGS.defaultMissingHours;
+
+  return {
+    id: cleanText(raw.id) || `restored-${Date.now()}-${index}`,
+    source: raw.source === "manual" ? "manual" : "excel",
+    name,
+    category: cleanText(raw.category),
+    workDate,
+    note: cleanText(raw.note),
+    reportedHours: Number.isFinite(reportedHoursNum) ? round2(reportedHoursNum) : null,
+    adjustedHours: Math.max(0, round2(baseHours)),
+    isAdjustedManually: Boolean(raw.isAdjustedManually),
+    missingStart: Boolean(raw.missingStart),
+    missingEnd: Boolean(raw.missingEnd),
+    originalStartIso: normalizePersistedIso(raw.originalStartIso),
+    originalEndIso: normalizePersistedIso(raw.originalEndIso),
+    startIso: normalizePersistedIso(raw.startIso),
+    endIso: normalizePersistedIso(raw.endIso),
+  };
+}
+
+function normalizePersistedIso(value) {
+  const text = cleanText(value);
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text) ? text : "";
+}
+
 function pad2(number) {
   return String(number).padStart(2, "0");
 }
@@ -1560,6 +1619,9 @@ function persistConfig() {
     settings: state.settings,
     holidays: state.holidays,
     employeeSettings: state.employeeSettings,
+    entries: state.entries,
+    selectedMonth: state.selectedMonth,
+    selectedEmployee: state.selectedEmployee,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
