@@ -255,6 +255,10 @@ select:focus {
   color: #27438a;
 }
 
+.hidden-file-input {
+  display: none;
+}
+
 .toggle-grid {
   display: grid;
   gap: 8px;

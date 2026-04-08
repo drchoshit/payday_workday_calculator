@@ -1,4 +1,6 @@
 const STORAGE_KEY = "payroll-app-config-v1";
+const EXPORT_APP_ID = "payroll-auto-settlement";
+const EXPORT_VERSION = 1;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 
 const HEADER_CANDIDATES = {
@@ -47,7 +49,11 @@ const dom = {
   tabPanels: Array.from(document.querySelectorAll(".tab-panel")),
   fileInput: document.getElementById("fileInput"),
   monthSelect: document.getElementById("monthSelect"),
+  summaryMonthSelect: document.getElementById("summaryMonthSelect"),
   recalculateBtn: document.getElementById("recalculateBtn"),
+  saveAllBtn: document.getElementById("saveAllBtn"),
+  loadAllBtn: document.getElementById("loadAllBtn"),
+  loadStateFileInput: document.getElementById("loadStateFileInput"),
   uploadStatus: document.getElementById("uploadStatus"),
 
   taxRateInput: document.getElementById("taxRateInput"),
@@ -92,9 +98,11 @@ const dom = {
   netPayCell: document.getElementById("netPayCell"),
 
   summaryBody: document.getElementById("summaryBody"),
+  summaryMeta: document.getElementById("summaryMeta"),
   summaryTotalHours: document.getElementById("summaryTotalHours"),
   summaryTotalGross: document.getElementById("summaryTotalGross"),
   summaryTotalNet: document.getElementById("summaryTotalNet"),
+  monthlyArchiveBody: document.getElementById("monthlyArchiveBody"),
 };
 
 init();
@@ -111,6 +119,7 @@ function init() {
   renderPreview();
   renderStatement();
   renderSummary();
+  renderMonthlyArchive();
 }
 
 function bindEvents() {
@@ -123,11 +132,27 @@ function bindEvents() {
   dom.fileInput.addEventListener("change", handleFileUpload);
   dom.monthSelect.addEventListener("change", () => {
     state.selectedMonth = dom.monthSelect.value;
+    ensureSelectedEmployeeForMonth();
+    syncMonthSelectors();
     persistConfig();
+    renderEmployeeSelectors();
     renderDetectedMissingTable();
     renderAppliedMissingTable();
     renderStatement();
     renderSummary();
+    renderMonthlyArchive();
+  });
+  dom.summaryMonthSelect.addEventListener("change", () => {
+    state.selectedMonth = dom.summaryMonthSelect.value;
+    ensureSelectedEmployeeForMonth();
+    syncMonthSelectors();
+    persistConfig();
+    renderEmployeeSelectors();
+    renderDetectedMissingTable();
+    renderAppliedMissingTable();
+    renderStatement();
+    renderSummary();
+    renderMonthlyArchive();
   });
   dom.recalculateBtn.addEventListener("click", () => {
     if (!state.entries.length) {
@@ -138,6 +163,9 @@ function bindEvents() {
     setStatus("현재 설정 기준으로 누락 데이터/기본값을 다시 계산했습니다.");
     renderEverything();
   });
+  dom.saveAllBtn.addEventListener("click", exportAllDataFile);
+  dom.loadAllBtn.addEventListener("click", () => dom.loadStateFileInput.click());
+  dom.loadStateFileInput.addEventListener("change", handleLoadStateFile);
 
   bindSettingListeners();
 
@@ -156,6 +184,7 @@ function bindEvents() {
   dom.missingDetectedBody.addEventListener("click", handleDetectedMissingAction);
   dom.missingAppliedBody.addEventListener("input", handleAppliedMissingInput);
   dom.missingAppliedBody.addEventListener("click", handleAppliedMissingAction);
+  dom.monthlyArchiveBody.addEventListener("click", handleMonthlyArchiveAction);
 
   dom.statementEmployeeSelect.addEventListener("change", () => {
     state.selectedEmployee = dom.statementEmployeeSelect.value;
@@ -637,21 +666,45 @@ function renderEverything() {
   renderPreview();
   renderStatement();
   renderSummary();
+  renderMonthlyArchive();
   persistConfig();
 }
 
 function renderMonthOptions() {
   const months = getAvailableMonths();
   if (!months.length) {
+    state.selectedMonth = "";
     dom.monthSelect.innerHTML = '<option value="">월 선택</option>';
+    dom.summaryMonthSelect.innerHTML = '<option value="">월 선택</option>';
     dom.monthSelect.value = "";
+    dom.summaryMonthSelect.value = "";
     return;
   }
-  dom.monthSelect.innerHTML = months
+  const optionHtml = months
     .map((month) => `<option value="${month}">${formatMonthLabel(month)}</option>`)
     .join("");
-  dom.monthSelect.value = months.includes(state.selectedMonth) ? state.selectedMonth : months[months.length - 1];
-  state.selectedMonth = dom.monthSelect.value;
+  dom.monthSelect.innerHTML = optionHtml;
+  dom.summaryMonthSelect.innerHTML = optionHtml;
+
+  const fallbackMonth = months[months.length - 1];
+  state.selectedMonth = months.includes(state.selectedMonth) ? state.selectedMonth : fallbackMonth;
+  syncMonthSelectors();
+}
+
+function syncMonthSelectors() {
+  if (dom.monthSelect.value !== state.selectedMonth) {
+    dom.monthSelect.value = state.selectedMonth;
+  }
+  if (dom.summaryMonthSelect.value !== state.selectedMonth) {
+    dom.summaryMonthSelect.value = state.selectedMonth;
+  }
+}
+
+function ensureSelectedEmployeeForMonth() {
+  const employees = getEmployeesInMonth(state.selectedMonth);
+  if (!employees.includes(state.selectedEmployee)) {
+    state.selectedEmployee = employees[0] || "";
+  }
 }
 
 function renderEmployeeSelectors() {
@@ -1144,6 +1197,7 @@ function renderTotalsEmpty() {
 
 function renderSummary() {
   if (!state.selectedMonth) {
+    dom.summaryMeta.textContent = "요약할 월을 선택하세요.";
     dom.summaryBody.innerHTML = '<tr><td colspan="4" class="empty">정산할 데이터가 없습니다.</td></tr>';
     dom.summaryTotalHours.textContent = "0시간 0분";
     dom.summaryTotalGross.textContent = "₩0";
@@ -1152,6 +1206,7 @@ function renderSummary() {
   }
 
   const employees = getEmployeesInMonth(state.selectedMonth);
+  dom.summaryMeta.textContent = `${formatMonthLabel(state.selectedMonth)} 기준 근무자별 급여 요약`;
   if (!employees.length) {
     dom.summaryBody.innerHTML = '<tr><td colspan="4" class="empty">정산할 데이터가 없습니다.</td></tr>';
     dom.summaryTotalHours.textContent = "0시간 0분";
@@ -1191,6 +1246,71 @@ function renderSummary() {
   dom.summaryTotalHours.textContent = formatDurationText(totals.hours);
   dom.summaryTotalGross.textContent = formatWon(totals.gross);
   dom.summaryTotalNet.textContent = formatWon(totals.net);
+}
+
+function renderMonthlyArchive() {
+  const months = getAvailableMonths();
+  if (!months.length) {
+    dom.monthlyArchiveBody.innerHTML =
+      '<tr><td colspan="6" class="empty">저장된 월별 데이터가 없습니다.</td></tr>';
+    return;
+  }
+
+  const rows = months.map((month) => buildMonthSnapshot(month));
+  dom.monthlyArchiveBody.innerHTML = rows
+    .map((row) => {
+      const selectedBadge = row.month === state.selectedMonth ? ' <span class="badge">현재 선택</span>' : "";
+      return `<tr>
+        <td>${formatMonthLabel(row.month)}${selectedBadge}</td>
+        <td>${row.employeeCount}</td>
+        <td>${formatDurationText(row.totalHours)}</td>
+        <td>${formatWon(row.totalGross)}</td>
+        <td>${formatWon(row.totalNet)}</td>
+        <td>
+          <button class="btn secondary small-btn view-month-btn" data-month="${row.month}" type="button">이 달 보기</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function buildMonthSnapshot(month) {
+  const employees = getEmployeesInMonth(month);
+  const totals = employees.reduce(
+    (acc, name) => {
+      const payroll = computeEmployeeMonthPayroll(name, month);
+      acc.hours += payroll.totals.hours;
+      acc.gross += payroll.totals.grossPay;
+      acc.net += payroll.totals.netPay;
+      return acc;
+    },
+    { hours: 0, gross: 0, net: 0 }
+  );
+  return {
+    month,
+    employeeCount: employees.length,
+    totalHours: round2(totals.hours),
+    totalGross: roundCurrency(totals.gross),
+    totalNet: roundCurrency(totals.net),
+  };
+}
+
+function handleMonthlyArchiveAction(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  if (!target.classList.contains("view-month-btn")) return;
+  const month = target.dataset.month;
+  if (!month) return;
+  state.selectedMonth = month;
+  ensureSelectedEmployeeForMonth();
+  syncMonthSelectors();
+  persistConfig();
+  renderEmployeeSelectors();
+  renderDetectedMissingTable();
+  renderAppliedMissingTable();
+  renderStatement();
+  renderSummary();
+  renderMonthlyArchive();
 }
 
 function computeEmployeeMonthPayroll(name, month) {
@@ -1814,6 +1934,149 @@ function setStatus(message, isError = false) {
   dom.uploadStatus.classList.toggle("text-danger", isError);
 }
 
+function buildPersistPayload() {
+  return {
+    settings: state.settings,
+    holidays: state.holidays,
+    employeeSettings: state.employeeSettings,
+    entries: state.entries,
+    selectedMonth: state.selectedMonth,
+    selectedEmployee: state.selectedEmployee,
+  };
+}
+
+function buildOutputsSnapshot() {
+  const months = getAvailableMonths();
+  const monthSnapshots = months.map((month) => {
+    const employees = getEmployeesInMonth(month);
+    const employeeSnapshots = employees.map((name) => {
+      const payroll = computeEmployeeMonthPayroll(name, month);
+      return {
+        name,
+        totals: payroll.totals,
+        weeks: payroll.weeks.map((week) => ({
+          weekIndex: week.weekIndex,
+          hours: week.hours,
+          workDays: week.workDays,
+          basePay: week.basePay,
+          overtimePremium: week.overtimePremium,
+          nightPremium: week.nightPremium,
+          holidayPremium: week.holidayPremium,
+          weeklyHolidayPay: week.weeklyHolidayPay,
+          totalPay: week.totalPay,
+        })),
+        shifts: payroll.shifts.map((shift) => ({
+          workDate: shift.entry.workDate,
+          startIso: shift.entry.startIso,
+          endIso: shift.entry.endIso,
+          adjustedHours: shift.entry.adjustedHours,
+          basePay: shift.basePay,
+          overtimePremium: shift.overtimePremium,
+          nightPremium: shift.nightPremium,
+          holidayPremium: shift.holidayPremium,
+          shiftPay: shift.shiftPay,
+        })),
+      };
+    });
+
+    const totals = employeeSnapshots.reduce(
+      (acc, item) => {
+        acc.hours += item.totals.hours;
+        acc.basePay += item.totals.basePay;
+        acc.allowances += item.totals.allowances;
+        acc.gross += item.totals.grossPay;
+        acc.net += item.totals.netPay;
+        return acc;
+      },
+      { hours: 0, basePay: 0, allowances: 0, gross: 0, net: 0 }
+    );
+
+    return {
+      month,
+      monthLabel: formatMonthLabel(month),
+      employeeCount: employees.length,
+      totals: {
+        hours: round2(totals.hours),
+        basePay: roundCurrency(totals.basePay),
+        allowances: roundCurrency(totals.allowances),
+        grossPay: roundCurrency(totals.gross),
+        netPay: roundCurrency(totals.net),
+      },
+      employees: employeeSnapshots,
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    monthSnapshots,
+  };
+}
+
+function exportAllDataFile() {
+  const payload = {
+    app: EXPORT_APP_ID,
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: buildPersistPayload(),
+    outputs: buildOutputsSnapshot(),
+  };
+
+  const json = JSON.stringify(payload, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = buildExportTimeStamp(new Date());
+  link.href = url;
+  link.download = `payroll_backup_${stamp}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setStatus("전체 데이터(입력/결과 포함) 저장 파일을 만들었습니다.");
+}
+
+async function handleLoadStateFile(event) {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement) || !input.files?.length) return;
+  const file = input.files[0];
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const data = parsed && typeof parsed === "object" && parsed.data ? parsed.data : parsed;
+    if (!data || typeof data !== "object") {
+      throw new Error("저장 파일 형식이 올바르지 않습니다.");
+    }
+    restoreFromImportedData(data);
+    renderEverything();
+    setStatus(`"${file.name}" 파일을 불러왔습니다. 저장된 월별 데이터가 복원되었습니다.`);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "저장 파일을 불러오는 중 오류가 발생했습니다.";
+    setStatus(message, true);
+  } finally {
+    input.value = "";
+  }
+}
+
+function restoreFromImportedData(data) {
+  state.settings = { ...DEFAULT_SETTINGS, ...((data.settings && typeof data.settings === "object") ? data.settings : {}) };
+  state.holidays = sanitizeHolidayList(Array.isArray(data.holidays) ? data.holidays : []);
+  state.employeeSettings =
+    data.employeeSettings && typeof data.employeeSettings === "object" ? data.employeeSettings : {};
+  state.entries = normalizePersistedEntries(Array.isArray(data.entries) ? data.entries : []);
+  state.selectedMonth = cleanText(data.selectedMonth || "");
+  state.selectedEmployee = cleanText(data.selectedEmployee || "");
+  applyDefaultWageMigration();
+  syncEmployeeSettings();
+  hydrateSettingInputs();
+}
+
+function buildExportTimeStamp(date) {
+  return `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}_${pad2(
+    date.getHours()
+  )}${pad2(date.getMinutes())}${pad2(date.getSeconds())}`;
+}
+
 function applyDefaultWageMigration() {
   let changed = false;
   if (toNumber(state.settings.defaultHourlyWage, NaN) === 11000) {
@@ -1832,14 +2095,7 @@ function applyDefaultWageMigration() {
 }
 
 function persistConfig() {
-  const payload = {
-    settings: state.settings,
-    holidays: state.holidays,
-    employeeSettings: state.employeeSettings,
-    entries: state.entries,
-    selectedMonth: state.selectedMonth,
-    selectedEmployee: state.selectedEmployee,
-  };
+  const payload = buildPersistPayload();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 

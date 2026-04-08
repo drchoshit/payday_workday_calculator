@@ -56,6 +56,20 @@
                     다시 계산
                   </button>
                 </div>
+                <div class="inline-fields">
+                  <button id="saveAllBtn" class="btn secondary" type="button">
+                    전체 저장 파일 만들기
+                  </button>
+                  <button id="loadAllBtn" class="btn secondary" type="button">
+                    저장 파일 불러오기
+                  </button>
+                  <input
+                    id="loadStateFileInput"
+                    class="hidden-file-input"
+                    type="file"
+                    accept=".json,application/json"
+                  />
+                </div>
                 <p id="uploadStatus" class="hint">
                   파일을 업로드하면 근무자/월/주차별 데이터가 생성됩니다.
                 </p>
@@ -406,8 +420,15 @@
           <article class="card">
             <div class="card-head">
               <h2>전체 급여 요약</h2>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>요약 월 선택</span>
+                  <select id="summaryMonthSelect"></select>
+                </label>
+              </div>
             </div>
             <div class="card-body scroll-x">
+              <div id="summaryMeta" class="meta-line"></div>
               <table class="table">
                 <thead>
                   <tr>
@@ -425,11 +446,36 @@
                 <tfoot>
                   <tr>
                     <th>합계</th>
-                    <th id="summaryTotalHours">0.00시간</th>
+                    <th id="summaryTotalHours">0시간 0분</th>
                     <th id="summaryTotalGross">₩0</th>
                     <th id="summaryTotalNet">₩0</th>
                   </tr>
                 </tfoot>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>월별 누적 저장 현황</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>월</th>
+                    <th>근무자 수</th>
+                    <th>총 근무시간</th>
+                    <th>급여 총계</th>
+                    <th>세후 총계</th>
+                    <th>바로 보기</th>
+                  </tr>
+                </thead>
+                <tbody id="monthlyArchiveBody">
+                  <tr>
+                    <td colspan="6" class="empty">저장된 월별 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
               </table>
             </div>
           </article>
