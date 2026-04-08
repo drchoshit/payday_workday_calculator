@@ -26,7 +26,6 @@ const DEFAULT_SETTINGS = {
   defaultNightStart: "22:30",
   nightEndTime: "06:00",
   weeklyThresholdHours: 15,
-  weeklyMultiplier: 1,
 };
 
 const persisted = loadPersistedConfig();
@@ -64,7 +63,6 @@ const dom = {
   defaultNightStartInput: document.getElementById("defaultNightStartInput"),
   nightEndTimeInput: document.getElementById("nightEndTimeInput"),
   weeklyThresholdInput: document.getElementById("weeklyThresholdInput"),
-  weeklyMultiplierInput: document.getElementById("weeklyMultiplierInput"),
 
   holidayDateInput: document.getElementById("holidayDateInput"),
   addHolidayBtn: document.getElementById("addHolidayBtn"),
@@ -244,7 +242,6 @@ function bindSettingListeners() {
     ["defaultHourlyWageInput", "defaultHourlyWage"],
     ["defaultMissingHoursInput", "defaultMissingHours"],
     ["weeklyThresholdInput", "weeklyThresholdHours"],
-    ["weeklyMultiplierInput", "weeklyMultiplier"],
   ];
   numberBindings.forEach(([inputId, settingKey]) => {
     dom[inputId].addEventListener("input", () => {
@@ -280,7 +277,6 @@ function hydrateSettingInputs() {
   dom.defaultNightStartInput.value = state.settings.defaultNightStart;
   dom.nightEndTimeInput.value = state.settings.nightEndTime;
   dom.weeklyThresholdInput.value = String(state.settings.weeklyThresholdHours);
-  dom.weeklyMultiplierInput.value = String(state.settings.weeklyMultiplier);
 }
 
 function switchTab(tabName) {
@@ -1339,11 +1335,9 @@ function computeEmployeeMonthPayroll(name, month) {
 
   if (config.useWeeklyHoliday) {
     weekMap.forEach((week) => {
-      const workDays = week.daySet.size;
       const threshold = Math.max(0, toNumber(state.settings.weeklyThresholdHours, 15));
-      if (week.hours >= threshold && workDays > 0) {
-        const multiplier = Math.max(0, toNumber(state.settings.weeklyMultiplier, 1));
-        const weeklyHolidayHours = (week.hours / workDays) * multiplier;
+      if (week.hours >= threshold) {
+        const weeklyHolidayHours = Math.min(8, Math.max(0, (week.hours / 40) * 8));
         week.weeklyHolidayPay = roundCurrency(weeklyHolidayHours * hourlyRate);
         week.totalPay += week.weeklyHolidayPay;
       }

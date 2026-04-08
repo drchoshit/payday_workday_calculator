@@ -139,13 +139,9 @@
                     <span>주휴 기준시간(주)</span>
                     <input id="weeklyThresholdInput" type="number" min="0" step="0.1" />
                   </label>
-                  <label class="field">
-                    <span>주휴 가중치</span>
-                    <input id="weeklyMultiplierInput" type="number" min="0" step="0.1" />
-                  </label>
                 </div>
                 <p class="hint">
-                  주휴 가중치는 계산된 주휴시간에 곱해지는 비율입니다. `1`은 기본, `0.5`는 절반, `1.2`는 20% 추가 반영입니다.
+                  주휴 계산식: `주휴시간 = min(8, (주간 근무시간 / 40) × 8)`, `주휴수당 = 주휴시간 × 시급`
                 </p>
               </div>
             </article>
