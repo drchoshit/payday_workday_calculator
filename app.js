@@ -1106,7 +1106,7 @@ function renderStatement() {
   if (!state.selectedMonth || !state.selectedEmployee) {
     dom.statementMeta.textContent = "근무자와 정산 월을 선택하세요.";
     dom.statementBody.innerHTML =
-      '<tr><td colspan="13" class="empty">표시할 근무 내역이 없습니다.</td></tr>';
+      '<tr><td colspan="12" class="empty">표시할 근무 내역이 없습니다.</td></tr>';
     dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
     renderTotalsEmpty();
     return;
@@ -1121,7 +1121,7 @@ function renderStatement() {
 
   if (!payroll.shifts.length) {
     dom.statementBody.innerHTML =
-      '<tr><td colspan="13" class="empty">선택한 월의 근무기록이 없습니다.</td></tr>';
+      '<tr><td colspan="12" class="empty">선택한 월의 근무기록이 없습니다.</td></tr>';
     dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
     renderTotalsEmpty();
     return;
@@ -1129,16 +1129,6 @@ function renderStatement() {
 
   dom.statementBody.innerHTML = payroll.shifts
     .map((shift) => {
-      const notes = [];
-      if (shift.entry.missingStart || shift.entry.missingEnd) {
-        notes.push('<span class="badge warn">누락 보정</span>');
-      }
-      if (shift.isHolidayDate) {
-        notes.push('<span class="badge">공휴일</span>');
-      }
-      if (shift.entry.note) {
-        notes.push(escapeHtml(shift.entry.note));
-      }
       return `<tr>
         <td>${shift.weekIndex}주차</td>
         <td>${formatDateWithDay(shift.entry.workDate)}</td>
@@ -1155,7 +1145,6 @@ function renderStatement() {
         <td>${formatWon(shift.nightPremium)}</td>
         <td>${formatWon(shift.holidayPremium)}</td>
         <td>${formatWon(shift.shiftPay)}</td>
-        <td>${notes.join(" ") || "-"}</td>
         <td><button class="btn secondary delete-entry-btn" data-id="${shift.entry.id}" type="button">삭제</button></td>
       </tr>`;
     })
