@@ -49,6 +49,7 @@ const dom = {
   fileInput: document.getElementById("fileInput"),
   monthSelect: document.getElementById("monthSelect"),
   summaryMonthSelect: document.getElementById("summaryMonthSelect"),
+  downloadSummaryExcelBtn: document.getElementById("downloadSummaryExcelBtn"),
   recalculateBtn: document.getElementById("recalculateBtn"),
   saveAllBtn: document.getElementById("saveAllBtn"),
   loadAllBtn: document.getElementById("loadAllBtn"),
@@ -164,6 +165,7 @@ function bindEvents() {
   dom.saveAllBtn.addEventListener("click", exportAllDataFile);
   dom.loadAllBtn.addEventListener("click", () => dom.loadStateFileInput.click());
   dom.loadStateFileInput.addEventListener("change", handleLoadStateFile);
+  dom.downloadSummaryExcelBtn.addEventListener("click", downloadSummaryExcel);
 
   bindSettingListeners();
 
@@ -1200,12 +1202,7 @@ function renderSummary() {
     return;
   }
 
-  const rows = employees
-    .map((name) => ({
-      name,
-      payroll: computeEmployeeMonthPayroll(name, state.selectedMonth),
-    }))
-    .sort((a, b) => b.payroll.totals.grossPay - a.payroll.totals.grossPay);
+  const rows = buildSummaryRowsForMonth(state.selectedMonth);
 
   dom.summaryBody.innerHTML = rows
     .map(
@@ -1231,6 +1228,70 @@ function renderSummary() {
   dom.summaryTotalHours.textContent = formatDurationText(totals.hours);
   dom.summaryTotalGross.textContent = formatWon(totals.gross);
   dom.summaryTotalNet.textContent = formatWon(totals.net);
+}
+
+function buildSummaryRowsForMonth(month) {
+  return getEmployeesInMonth(month)
+    .map((name) => ({
+      name,
+      payroll: computeEmployeeMonthPayroll(name, month),
+    }))
+    .sort((a, b) => b.payroll.totals.grossPay - a.payroll.totals.grossPay);
+}
+
+function downloadSummaryExcel() {
+  if (!state.selectedMonth) {
+    setStatus("다운로드할 월을 먼저 선택하세요.", true);
+    return;
+  }
+
+  const rows = buildSummaryRowsForMonth(state.selectedMonth);
+  if (!rows.length) {
+    setStatus("선택한 월에 다운로드할 급여 요약 데이터가 없습니다.", true);
+    return;
+  }
+
+  const dataRows = rows.map((row, index) => ({
+    번호: index + 1,
+    이름: row.name,
+    근무시간: formatDurationText(row.payroll.totals.hours),
+    "근무시간(시간)": round2(row.payroll.totals.hours),
+    "급여 총계(원)": roundCurrency(row.payroll.totals.grossPay),
+    "세후 급여(원)": roundCurrency(row.payroll.totals.netPay),
+  }));
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.hours += row.payroll.totals.hours;
+      acc.gross += row.payroll.totals.grossPay;
+      acc.net += row.payroll.totals.netPay;
+      return acc;
+    },
+    { hours: 0, gross: 0, net: 0 }
+  );
+  dataRows.push({
+    번호: "",
+    이름: "합계",
+    근무시간: formatDurationText(totals.hours),
+    "근무시간(시간)": round2(totals.hours),
+    "급여 총계(원)": roundCurrency(totals.gross),
+    "세후 급여(원)": roundCurrency(totals.net),
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(dataRows);
+  worksheet["!cols"] = [
+    { wch: 8 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 16 },
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "전체 급여 요약");
+  XLSX.writeFile(workbook, `근무자별_급여요약_${state.selectedMonth}.xlsx`);
+  setStatus(`${formatMonthLabel(state.selectedMonth)} 급여 요약 엑셀을 다운로드했습니다.`);
 }
 
 function renderMonthlyArchive() {
