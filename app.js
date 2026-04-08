@@ -66,6 +66,7 @@ const dom = {
 
   employeeSettingsBody: document.getElementById("employeeSettingsBody"),
   missingDetectedBody: document.getElementById("missingDetectedBody"),
+  missingAppliedBody: document.getElementById("missingAppliedBody"),
 
   missingEmployeeSelect: document.getElementById("missingEmployeeSelect"),
   missingEmployeeName: document.getElementById("missingEmployeeName"),
@@ -106,6 +107,7 @@ function init() {
   renderEmployeeSelectors();
   renderEmployeeSettingsTable();
   renderDetectedMissingTable();
+  renderAppliedMissingTable();
   renderPreview();
   renderStatement();
   renderSummary();
@@ -123,6 +125,7 @@ function bindEvents() {
     state.selectedMonth = dom.monthSelect.value;
     persistConfig();
     renderDetectedMissingTable();
+    renderAppliedMissingTable();
     renderStatement();
     renderSummary();
   });
@@ -149,7 +152,10 @@ function bindEvents() {
   dom.employeeSettingsBody.addEventListener("input", handleEmployeeSettingChange);
   dom.employeeSettingsBody.addEventListener("click", handleEmployeeSettingAction);
   dom.addMissingShiftBtn.addEventListener("click", addMissingShift);
+  dom.missingDetectedBody.addEventListener("input", handleDetectedMissingInput);
   dom.missingDetectedBody.addEventListener("click", handleDetectedMissingAction);
+  dom.missingAppliedBody.addEventListener("input", handleAppliedMissingInput);
+  dom.missingAppliedBody.addEventListener("click", handleAppliedMissingAction);
 
   dom.statementEmployeeSelect.addEventListener("change", () => {
     state.selectedEmployee = dom.statementEmployeeSelect.value;
@@ -424,6 +430,11 @@ function normalizeShift(raw) {
     isAdjustedManually: Boolean(raw.isAdjustedManually),
     missingStart,
     missingEnd,
+    missingOriginDetected:
+      typeof raw.missingOriginDetected === "boolean"
+        ? raw.missingOriginDetected
+        : raw.source === "excel" && (missingStart || missingEnd),
+    missingFixApplied: Boolean(raw.missingFixApplied),
     originalStartIso: originalStart ? formatDateTimeKey(originalStart) : "",
     originalEndIso: originalEnd ? formatDateTimeKey(originalEnd) : "",
     startIso: start ? formatDateTimeKey(start) : "",
@@ -445,6 +456,8 @@ function rebuildEntriesWithCurrentDefaults() {
         reportedHours: entry.reportedHours,
         note: entry.note,
         isAdjustedManually: entry.isAdjustedManually,
+        missingOriginDetected: entry.missingOriginDetected,
+        missingFixApplied: entry.missingFixApplied,
       });
       if (entry.isAdjustedManually) {
         normalized.adjustedHours = entry.adjustedHours;
@@ -495,10 +508,15 @@ function renderHolidayList() {
 function addMissingShift() {
   const selectedExisting = dom.missingEmployeeSelect.value;
   const customName = cleanText(dom.missingEmployeeName.value);
-  const name = customName || selectedExisting;
+  const isNewEmployeeSelection = selectedExisting === "__new__";
+  const name = isNewEmployeeSelection ? customName : customName || selectedExisting;
   const workDate = dom.missingDate.value;
   if (!name || !workDate) {
     setStatus("누락 근무 추가 시 근무자 이름과 근무일은 필수입니다.", true);
+    return;
+  }
+  if (isNewEmployeeSelection && !customName) {
+    setStatus("신규 근무자 추가를 선택한 경우 이름을 입력하세요.", true);
     return;
   }
 
@@ -615,6 +633,7 @@ function renderEverything() {
   renderEmployeeSelectors();
   renderEmployeeSettingsTable();
   renderDetectedMissingTable();
+  renderAppliedMissingTable();
   renderPreview();
   renderStatement();
   renderSummary();
@@ -638,12 +657,13 @@ function renderMonthOptions() {
 function renderEmployeeSelectors() {
   const employees = getEmployeesInMonth(state.selectedMonth);
   const placeholder = '<option value="">근무자 선택</option>';
+  const newEmployeeOption = '<option value="__new__">+ 신규 근무자 추가</option>';
   const optionHtml = employees
     .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
     .join("");
 
   dom.statementEmployeeSelect.innerHTML = placeholder + optionHtml;
-  dom.missingEmployeeSelect.innerHTML = placeholder + optionHtml;
+  dom.missingEmployeeSelect.innerHTML = placeholder + newEmployeeOption + optionHtml;
 
   if (employees.includes(state.selectedEmployee)) {
     dom.statementEmployeeSelect.value = state.selectedEmployee;
@@ -759,8 +779,34 @@ function renderDetectedMissingTable() {
 function getDetectedMissingEntries() {
   return state.entries
     .filter((entry) => entry.source === "excel" && (entry.missingStart || entry.missingEnd))
+    .filter((entry) => !entry.missingFixApplied)
     .filter((entry) => !state.selectedMonth || entry.workDate.startsWith(state.selectedMonth))
     .sort(compareEntries);
+}
+
+function handleDetectedMissingInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (!target.classList.contains("missing-fix-start") && !target.classList.contains("missing-fix-end")) return;
+
+  const row = target.closest("tr");
+  if (!row) return;
+  const startInput = row.querySelector(".missing-fix-start");
+  const endInput = row.querySelector(".missing-fix-end");
+  const hoursInput = row.querySelector(".missing-fix-hours");
+  if (!(startInput instanceof HTMLInputElement)) return;
+  if (!(endInput instanceof HTMLInputElement)) return;
+  if (!(hoursInput instanceof HTMLInputElement)) return;
+
+  const entryId = target.dataset.id;
+  if (!entryId) return;
+  const entry = state.entries.find((item) => item.id === entryId);
+  if (!entry) return;
+
+  const autoHours = calculateDurationFromTimeInputs(entry.workDate, startInput.value, endInput.value);
+  if (Number.isFinite(autoHours)) {
+    hoursInput.value = formatDurationText(autoHours);
+  }
 }
 
 function handleDetectedMissingAction(event) {
@@ -789,7 +835,14 @@ function handleDetectedMissingAction(event) {
 
   let nextStart = startRaw ? combineDateAndTime(day, startRaw) : parseDateTimeKey(entry.originalStartIso);
   let nextEnd = endRaw ? combineDateAndTime(day, endRaw) : parseDateTimeKey(entry.originalEndIso);
-  const durationHours = parseDurationInput(hoursRaw);
+  let durationHours = parseDurationInput(hoursRaw);
+
+  if (!Number.isFinite(durationHours)) {
+    const autoHours = calculateDurationFromTimeInputs(entry.workDate, startRaw, endRaw);
+    if (Number.isFinite(autoHours)) {
+      durationHours = autoHours;
+    }
+  }
 
   if (!nextStart && !nextEnd && !Number.isFinite(durationHours)) {
     setStatus("보정할 값을 하나 이상 입력하세요.", true);
@@ -815,17 +868,160 @@ function handleDetectedMissingAction(event) {
 
   if (Number.isFinite(durationHours)) {
     replaced.adjustedHours = round2(durationHours);
+    replaced.reportedHours = round2(durationHours);
     replaced.isAdjustedManually = true;
   } else if (entry.isAdjustedManually) {
     replaced.adjustedHours = entry.adjustedHours;
     replaced.isAdjustedManually = true;
   }
 
+  replaced.missingOriginDetected = true;
+  replaced.missingFixApplied = true;
+
   const idx = state.entries.findIndex((item) => item.id === entryId);
   if (idx >= 0) {
     state.entries[idx] = replaced;
     state.entries.sort(compareEntries);
     setStatus(`${entry.name} ${formatDateForDisplay(entry.workDate)} 누락 기록을 보정했습니다.`);
+    renderEverything();
+  }
+}
+
+function getAppliedMissingEntries() {
+  return state.entries
+    .filter((entry) => entry.source === "excel" && entry.missingOriginDetected && entry.missingFixApplied)
+    .filter((entry) => !state.selectedMonth || entry.workDate.startsWith(state.selectedMonth))
+    .sort(compareEntries);
+}
+
+function renderAppliedMissingTable() {
+  const rows = getAppliedMissingEntries();
+  if (!rows.length) {
+    dom.missingAppliedBody.innerHTML =
+      '<tr><td colspan="6" class="empty">아직 적용 완료된 누락 보정 기록이 없습니다.</td></tr>';
+    return;
+  }
+
+  dom.missingAppliedBody.innerHTML = rows
+    .map((entry) => {
+      const startValue = entry.startIso ? formatTimeFromIso(entry.startIso) : "";
+      const endValue = entry.endIso ? formatTimeFromIso(entry.endIso) : "";
+      return `<tr>
+        <td>${escapeHtml(entry.name)}</td>
+        <td>${formatDateWithDay(entry.workDate)}</td>
+        <td><input class="applied-fix-start" data-id="${entry.id}" type="time" value="${startValue}" /></td>
+        <td><input class="applied-fix-end" data-id="${entry.id}" type="time" value="${endValue}" /></td>
+        <td>
+          <input class="applied-fix-hours" data-id="${entry.id}" type="text" value="${formatDurationText(
+            entry.adjustedHours
+          )}" />
+        </td>
+        <td>
+          <button class="btn secondary small-btn apply-applied-fix-btn" data-id="${entry.id}" type="button">수정 적용</button>
+        </td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function handleAppliedMissingInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (!target.classList.contains("applied-fix-start") && !target.classList.contains("applied-fix-end")) return;
+
+  const row = target.closest("tr");
+  if (!row) return;
+  const startInput = row.querySelector(".applied-fix-start");
+  const endInput = row.querySelector(".applied-fix-end");
+  const hoursInput = row.querySelector(".applied-fix-hours");
+  if (!(startInput instanceof HTMLInputElement)) return;
+  if (!(endInput instanceof HTMLInputElement)) return;
+  if (!(hoursInput instanceof HTMLInputElement)) return;
+
+  const entryId = target.dataset.id;
+  if (!entryId) return;
+  const entry = state.entries.find((item) => item.id === entryId);
+  if (!entry) return;
+
+  const autoHours = calculateDurationFromTimeInputs(entry.workDate, startInput.value, endInput.value);
+  if (Number.isFinite(autoHours)) {
+    hoursInput.value = formatDurationText(autoHours);
+  }
+}
+
+function handleAppliedMissingAction(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) return;
+  if (!target.classList.contains("apply-applied-fix-btn")) return;
+  const entryId = target.dataset.id;
+  if (!entryId) return;
+  const entry = state.entries.find((item) => item.id === entryId);
+  if (!entry) return;
+
+  const startInput = dom.missingAppliedBody.querySelector(`.applied-fix-start[data-id="${entryId}"]`);
+  const endInput = dom.missingAppliedBody.querySelector(`.applied-fix-end[data-id="${entryId}"]`);
+  const hoursInput = dom.missingAppliedBody.querySelector(`.applied-fix-hours[data-id="${entryId}"]`);
+  if (!(startInput instanceof HTMLInputElement)) return;
+  if (!(endInput instanceof HTMLInputElement)) return;
+  if (!(hoursInput instanceof HTMLInputElement)) return;
+
+  const day = parseDateOnly(entry.workDate);
+  if (!day) return;
+
+  const startRaw = startInput.value.trim();
+  const endRaw = endInput.value.trim();
+  const hoursRaw = hoursInput.value.trim();
+
+  let nextStart = startRaw ? combineDateAndTime(day, startRaw) : null;
+  let nextEnd = endRaw ? combineDateAndTime(day, endRaw) : null;
+  let durationHours = parseDurationInput(hoursRaw);
+
+  if (!Number.isFinite(durationHours)) {
+    const autoHours = calculateDurationFromTimeInputs(entry.workDate, startRaw, endRaw);
+    if (Number.isFinite(autoHours)) {
+      durationHours = autoHours;
+    }
+  }
+
+  if (!nextStart && !nextEnd && !Number.isFinite(durationHours)) {
+    setStatus("수정할 값을 하나 이상 입력하세요.", true);
+    return;
+  }
+  if (nextStart && nextEnd && nextEnd <= nextStart) {
+    nextEnd = addDays(nextEnd, 1);
+  }
+
+  const replaced = normalizeShift({
+    id: entry.id,
+    source: entry.source,
+    name: entry.name,
+    category: entry.category,
+    workDate: entry.workDate,
+    start: nextStart,
+    end: nextEnd,
+    reportedHours: Number.isFinite(durationHours) ? durationHours : entry.reportedHours,
+    note: entry.note || "누락 보정",
+    isAdjustedManually: true,
+    missingOriginDetected: true,
+    missingFixApplied: true,
+  });
+
+  if (Number.isFinite(durationHours)) {
+    replaced.adjustedHours = round2(durationHours);
+    replaced.reportedHours = round2(durationHours);
+  } else {
+    replaced.adjustedHours = entry.adjustedHours;
+    replaced.reportedHours = entry.reportedHours;
+  }
+
+  replaced.missingOriginDetected = true;
+  replaced.missingFixApplied = true;
+
+  const idx = state.entries.findIndex((item) => item.id === entryId);
+  if (idx >= 0) {
+    state.entries[idx] = replaced;
+    state.entries.sort(compareEntries);
+    setStatus(`${entry.name} ${formatDateForDisplay(entry.workDate)} 보정 기록을 수정했습니다.`);
     renderEverything();
   }
 }
@@ -1476,6 +1672,22 @@ function parseDurationInput(value) {
   return NaN;
 }
 
+function calculateDurationFromTimeInputs(workDate, startText, endText) {
+  const day = parseDateOnly(workDate);
+  if (!day) return NaN;
+  const start = String(startText || "").trim();
+  const end = String(endText || "").trim();
+  if (!start || !end) return NaN;
+  if (!/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) return NaN;
+
+  let startDt = combineDateAndTime(day, start);
+  let endDt = combineDateAndTime(day, end);
+  if (endDt <= startDt) {
+    endDt = addDays(endDt, 1);
+  }
+  return round2(diffHours(startDt, endDt));
+}
+
 function formatWon(value) {
   return `₩${wonFormatter.format(Math.round(toNumber(value, 0)))}`;
 }
@@ -1576,6 +1788,11 @@ function normalizePersistedEntry(raw, index) {
     isAdjustedManually: Boolean(raw.isAdjustedManually),
     missingStart: Boolean(raw.missingStart),
     missingEnd: Boolean(raw.missingEnd),
+    missingOriginDetected:
+      typeof raw.missingOriginDetected === "boolean"
+        ? raw.missingOriginDetected
+        : raw.source === "excel" && (Boolean(raw.missingStart) || Boolean(raw.missingEnd)),
+    missingFixApplied: Boolean(raw.missingFixApplied),
     originalStartIso: normalizePersistedIso(raw.originalStartIso),
     originalEndIso: normalizePersistedIso(raw.originalEndIso),
     startIso: normalizePersistedIso(raw.startIso),

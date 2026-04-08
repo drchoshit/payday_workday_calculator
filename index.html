@@ -212,6 +212,26 @@
                   </tr>
                 </tbody>
               </table>
+
+              <div class="spacer-sm"></div>
+              <h3 class="subheading">적용 완료 기록 (수정 가능)</h3>
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>근무일</th>
+                    <th>출근 보정</th>
+                    <th>퇴근 보정</th>
+                    <th>근무시간 보정</th>
+                    <th>수정 적용</th>
+                  </tr>
+                </thead>
+                <tbody id="missingAppliedBody">
+                  <tr>
+                    <td colspan="6" class="empty">아직 적용 완료된 누락 보정 기록이 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </article>
 
@@ -226,7 +246,7 @@
                   <select id="missingEmployeeSelect"></select>
                 </label>
                 <label class="field">
-                  <span>또는 신규 이름</span>
+                  <span>신규 이름(신규 근무자 추가 선택 시)</span>
                   <input id="missingEmployeeName" type="text" placeholder="예: 홍길동" />
                 </label>
                 <label class="field">

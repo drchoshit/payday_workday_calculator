@@ -245,6 +245,16 @@ select:focus {
   color: var(--ink-500);
 }
 
+.spacer-sm {
+  height: 14px;
+}
+
+.subheading {
+  margin: 6px 0 10px;
+  font-size: 15px;
+  color: #27438a;
+}
+
 .toggle-grid {
   display: grid;
   gap: 8px;
