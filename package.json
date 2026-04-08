@@ -1,0 +1,9 @@
+{
+  "name": "payroll-auto-settlement",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node local-server.js",
+    "start": "node local-server.js"
+  }
+}

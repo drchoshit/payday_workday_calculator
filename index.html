@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>급여 자동 정산 프로그램</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/sunn-us/SUIT/fonts/static/woff2/SUIT.css"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="bg-pattern" aria-hidden="true"></div>
+    <div class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Payroll Automation</p>
+          <h1>급여 자동 정산 프로그램</h1>
+          <p class="subtitle">
+            엑셀 업로드 후 근무자별 정산서와 전체 급여 요약을 자동 계산합니다.
+          </p>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="페이지 탭">
+        <button class="tab-btn active" data-tab="setup" type="button">
+          1) 업로드/설정
+        </button>
+        <button class="tab-btn" data-tab="statement" type="button">
+          2) 근무자별 정산서
+        </button>
+        <button class="tab-btn" data-tab="summary" type="button">
+          3) 전체 급여 요약
+        </button>
+      </nav>
+
+      <main>
+        <section id="tab-setup" class="tab-panel active">
+          <div class="grid two">
+            <article class="card">
+              <div class="card-head">
+                <h2>엑셀 업로드</h2>
+              </div>
+              <div class="card-body">
+                <label class="field">
+                  <span>근태 엑셀 파일</span>
+                  <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
+                </label>
+                <div class="inline-fields">
+                  <label class="field">
+                    <span>정산 월</span>
+                    <select id="monthSelect"></select>
+                  </label>
+                  <button id="recalculateBtn" class="btn primary" type="button">
+                    다시 계산
+                  </button>
+                </div>
+                <p id="uploadStatus" class="hint">
+                  파일을 업로드하면 근무자/월/주차별 데이터가 생성됩니다.
+                </p>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <h2>수당 적용 선택</h2>
+              </div>
+              <div class="card-body">
+                <div class="toggle-grid">
+                  <label class="switch">
+                    <input id="useWeeklyHolidayInput" type="checkbox" checked />
+                    <span>주휴수당 적용</span>
+                  </label>
+                  <label class="switch">
+                    <input id="useHolidayPremiumInput" type="checkbox" checked />
+                    <span>공휴일수당 적용(일요일 제외)</span>
+                  </label>
+                  <label class="switch">
+                    <input id="useOvertimePremiumInput" type="checkbox" checked />
+                    <span>연장근무수당 적용(1일 8시간 초과)</span>
+                  </label>
+                  <label class="switch">
+                    <input id="useNightPremiumInput" type="checkbox" checked />
+                    <span>야간수당 적용</span>
+                  </label>
+                </div>
+                <div class="inline-fields">
+                  <label class="field">
+                    <span>세율(%)</span>
+                    <input id="taxRateInput" type="number" min="0" step="0.1" />
+                  </label>
+                  <label class="field">
+                    <span>기본 시급(신규 근무자)</span>
+                    <input
+                      id="defaultHourlyWageInput"
+                      type="number"
+                      min="0"
+                      step="10"
+                    />
+                  </label>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <h2>누락 기록 기본 적용값</h2>
+              </div>
+              <div class="card-body">
+                <label class="switch">
+                  <input id="autoFillMissingInput" type="checkbox" checked />
+                  <span>출퇴근 누락 시 기본값 자동 적용</span>
+                </label>
+                <div class="inline-fields triple">
+                  <label class="field">
+                    <span>기본 근무시간(시간)</span>
+                    <input
+                      id="defaultMissingHoursInput"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                    />
+                  </label>
+                  <label class="field">
+                    <span>기본 출근시각</span>
+                    <input id="defaultStartTimeInput" type="time" />
+                  </label>
+                  <label class="field">
+                    <span>기본 야간 시작</span>
+                    <input id="defaultNightStartInput" type="time" />
+                  </label>
+                </div>
+                <div class="inline-fields">
+                  <label class="field">
+                    <span>야간 종료(전체 공통)</span>
+                    <input id="nightEndTimeInput" type="time" />
+                  </label>
+                  <label class="field">
+                    <span>주휴 기준시간(주)</span>
+                    <input id="weeklyThresholdInput" type="number" min="0" step="0.1" />
+                  </label>
+                  <label class="field">
+                    <span>주휴 가중치</span>
+                    <input id="weeklyMultiplierInput" type="number" min="0" step="0.1" />
+                  </label>
+                </div>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <h2>공휴일 설정</h2>
+              </div>
+              <div class="card-body">
+                <div class="inline-fields">
+                  <label class="field">
+                    <span>공휴일 날짜</span>
+                    <input id="holidayDateInput" type="date" />
+                  </label>
+                  <button id="addHolidayBtn" type="button" class="btn secondary">
+                    공휴일 추가
+                  </button>
+                </div>
+                <p class="hint">
+                  공휴일수당은 등록된 날짜에만 1.5배 적용되며, 일요일은 제외됩니다.
+                </p>
+                <div id="holidayList" class="chip-wrap"></div>
+              </div>
+            </article>
+          </div>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>근무자 시급 / 야간 기준 설정</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>카테고리</th>
+                    <th>시급(원)</th>
+                    <th>야간 시작(개인)</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeSettingsBody">
+                  <tr>
+                    <td colspan="4" class="empty">업로드 후 자동 생성됩니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>누락 근무 수동 추가</h2>
+            </div>
+            <div class="card-body">
+              <div class="inline-fields quad">
+                <label class="field">
+                  <span>근무자(기존 선택)</span>
+                  <select id="missingEmployeeSelect"></select>
+                </label>
+                <label class="field">
+                  <span>또는 신규 이름</span>
+                  <input id="missingEmployeeName" type="text" placeholder="예: 홍길동" />
+                </label>
+                <label class="field">
+                  <span>근무일</span>
+                  <input id="missingDate" type="date" />
+                </label>
+                <label class="field">
+                  <span>카테고리</span>
+                  <input id="missingCategory" type="text" placeholder="관리자/멘토" />
+                </label>
+              </div>
+              <div class="inline-fields quad">
+                <label class="field">
+                  <span>출근시각(선택)</span>
+                  <input id="missingStart" type="time" />
+                </label>
+                <label class="field">
+                  <span>퇴근시각(선택)</span>
+                  <input id="missingEnd" type="time" />
+                </label>
+                <label class="field">
+                  <span>근무시간 직접입력(선택)</span>
+                  <input id="missingHours" type="number" min="0" step="0.1" />
+                </label>
+                <label class="field">
+                  <span>비고</span>
+                  <input id="missingNote" type="text" placeholder="예: 패드 미기록" />
+                </label>
+              </div>
+              <button id="addMissingShiftBtn" type="button" class="btn primary">
+                누락 근무 추가
+              </button>
+              <p class="hint">
+                시작/종료가 비어 있으면 기본 출근시각 + 기본 근무시간이 적용됩니다.
+              </p>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>업로드 데이터 미리보기</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>영업일자</th>
+                    <th>이름</th>
+                    <th>카테고리</th>
+                    <th>출근</th>
+                    <th>퇴근</th>
+                    <th>정산시간</th>
+                    <th>비고</th>
+                  </tr>
+                </thead>
+                <tbody id="previewBody">
+                  <tr>
+                    <td colspan="7" class="empty">아직 업로드된 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section id="tab-statement" class="tab-panel">
+          <div class="card">
+            <div class="card-head align-center">
+              <h2>근무자 정산서</h2>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>근무자 선택</span>
+                  <select id="statementEmployeeSelect"></select>
+                </label>
+                <button id="printStatementBtn" class="btn secondary" type="button">
+                  인쇄
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div id="statementMeta" class="meta-line"></div>
+              <div class="scroll-x">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>주차</th>
+                      <th>근무일</th>
+                      <th>출근</th>
+                      <th>퇴근</th>
+                      <th>기록시간</th>
+                      <th>정산시간(수정 가능)</th>
+                      <th>기본급</th>
+                      <th>연장</th>
+                      <th>야간</th>
+                      <th>공휴일</th>
+                      <th>지급액</th>
+                      <th>비고</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody id="statementBody">
+                    <tr>
+                      <td colspan="13" class="empty">
+                        업로드 후 근무자를 선택하면 정산서가 표시됩니다.
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid two">
+            <article class="card">
+              <div class="card-head">
+                <h2>주차별 급여</h2>
+              </div>
+              <div class="card-body scroll-x">
+                <table class="table compact">
+                  <thead>
+                    <tr>
+                      <th>주차</th>
+                      <th>근무시간</th>
+                      <th>근무일수</th>
+                      <th>기본급</th>
+                      <th>수당(연장+야간+공휴일+주휴)</th>
+                      <th>주차 합계</th>
+                    </tr>
+                  </thead>
+                  <tbody id="weeklySummaryBody">
+                    <tr>
+                      <td colspan="6" class="empty">데이터가 없습니다.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <h2>최종 정산</h2>
+              </div>
+              <div class="card-body">
+                <div class="totals">
+                  <div><span>근무시간 합계</span><strong id="totalHoursCell">0.00시간</strong></div>
+                  <div><span>기본급 합계</span><strong id="basePayCell">₩0</strong></div>
+                  <div><span>수당 합계</span><strong id="allowanceCell">₩0</strong></div>
+                  <div><span>급여 총계</span><strong id="grossPayCell">₩0</strong></div>
+                  <div><span>세후 급여</span><strong id="netPayCell">₩0</strong></div>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section id="tab-summary" class="tab-panel">
+          <article class="card">
+            <div class="card-head">
+              <h2>전체 급여 요약</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>근무시간</th>
+                    <th>급여 총계(원)</th>
+                    <th>세후 급여(원)</th>
+                  </tr>
+                </thead>
+                <tbody id="summaryBody">
+                  <tr>
+                    <td colspan="4" class="empty">정산할 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>합계</th>
+                    <th id="summaryTotalHours">0.00시간</th>
+                    <th id="summaryTotalGross">₩0</th>
+                    <th id="summaryTotalNet">₩0</th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
