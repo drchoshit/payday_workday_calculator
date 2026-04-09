@@ -33,6 +33,12 @@
         <button class="tab-btn" data-tab="summary" type="button">
           3) 전체 급여 요약
         </button>
+        <button class="tab-btn" data-tab="schedule-ai" type="button">
+          4) 관리자 근무 일정 배정AI
+        </button>
+        <button class="tab-btn" data-tab="career" type="button">
+          5) 관리자 누적/직급 관리
+        </button>
       </nav>
 
       <main>
@@ -475,6 +481,347 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+          </article>
+        </section>
+
+        <section id="tab-schedule-ai" class="tab-panel">
+          <article class="card">
+            <div class="card-head">
+              <h2>자동 배정 설정</h2>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>배정 월</span>
+                  <input id="scheduleMonthInput" type="month" />
+                </label>
+                <button id="generateScheduleBtn" class="btn primary" type="button">
+                  자동 배정 실행
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <p class="hint">
+                자동 배정은 우선순위, 희망 근무 T 수, 가능한 요일/타임, 고정 배정을 반영합니다. 실행 후 아래 표에서 세부 수정할 수 있습니다.
+              </p>
+            </div>
+          </article>
+
+          <div class="grid two">
+            <article class="card">
+              <div class="card-head">
+                <h2>타임 설정</h2>
+              </div>
+              <div class="card-body scroll-x">
+                <table class="table compact">
+                  <thead>
+                    <tr>
+                      <th>타임</th>
+                      <th>시작</th>
+                      <th>종료</th>
+                    </tr>
+                  </thead>
+                  <tbody id="shiftTemplateBody">
+                    <tr>
+                      <td colspan="3" class="empty">타임 설정이 없습니다.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="card">
+              <div class="card-head">
+                <h2>고정 배정 규칙</h2>
+              </div>
+              <div class="card-body">
+                <div class="inline-fields">
+                  <label class="field">
+                    <span>규칙 유형</span>
+                    <select id="fixedRuleMode">
+                      <option value="weekly">매주 반복</option>
+                      <option value="date">특정 날짜</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>요일</span>
+                    <select id="fixedRuleWeekday"></select>
+                  </label>
+                  <label class="field">
+                    <span>날짜</span>
+                    <input id="fixedRuleDate" type="date" />
+                  </label>
+                </div>
+                <div class="inline-fields">
+                  <label class="field">
+                    <span>타임</span>
+                    <select id="fixedRuleShift"></select>
+                  </label>
+                  <label class="field">
+                    <span>근무자</span>
+                    <select id="fixedRuleManager"></select>
+                  </label>
+                  <label class="field">
+                    <span>메모</span>
+                    <input id="fixedRuleNote" type="text" placeholder="예: 월요일 1T 고정" />
+                  </label>
+                  <button id="addFixedRuleBtn" class="btn secondary" type="button">
+                    고정 규칙 추가
+                  </button>
+                </div>
+                <div class="scroll-x">
+                  <table class="table compact">
+                    <thead>
+                      <tr>
+                        <th>유형</th>
+                        <th>요일/날짜</th>
+                        <th>타임</th>
+                        <th>근무자</th>
+                        <th>메모</th>
+                        <th>삭제</th>
+                      </tr>
+                    </thead>
+                    <tbody id="fixedRuleBody">
+                      <tr>
+                        <td colspan="6" class="empty">등록된 고정 배정 규칙이 없습니다.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </article>
+          </div>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>관리자별 배정 조건</h2>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>신규 관리자 이름</span>
+                  <input id="newManagerNameInput" type="text" placeholder="예: 홍길동" />
+                </label>
+                <button id="addManagerRowBtn" class="btn secondary" type="button">관리자 추가</button>
+                <button id="allAvailabilityOnBtn" class="btn secondary" type="button">전체 체크</button>
+                <button id="allAvailabilityOffBtn" class="btn secondary" type="button">전체 체크 해제</button>
+                <button id="shift3AvailabilityOnBtn" class="btn secondary" type="button">3T 전체 체크</button>
+                <button id="shift3AvailabilityOffBtn" class="btn secondary" type="button">
+                  3T 전체 해제
+                </button>
+              </div>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table compact schedule-manager-table">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>시급</th>
+                    <th>희망 T 수</th>
+                    <th>우선순위</th>
+                    <th>1타임 P</th>
+                    <th>월 가능</th>
+                    <th>화 가능</th>
+                    <th>수 가능</th>
+                    <th>목 가능</th>
+                    <th>금 가능</th>
+                    <th>토 가능</th>
+                    <th>일 가능</th>
+                    <th>행 삭제</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleManagerBody">
+                  <tr>
+                    <td colspan="13" class="empty">근무자 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="hint">각 요일 셀에서 `1T/2T/3T`를 체크해 가능한 타임을 입력하세요.</p>
+            </div>
+          </article>
+
+          <article class="card print-schedule-card">
+            <div class="card-head">
+              <h2>월간 근무자 배정 캘린더</h2>
+              <button id="printScheduleBtn" class="btn secondary" type="button">프린트</button>
+            </div>
+            <div class="card-body scroll-x print-schedule-target">
+              <table class="schedule-calendar-table">
+                <thead id="scheduleCalendarHead">
+                  <tr>
+                    <th>월</th>
+                    <th>화</th>
+                    <th>수</th>
+                    <th>목</th>
+                    <th>금</th>
+                    <th>토</th>
+                    <th>일</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleCalendarBody">
+                  <tr>
+                    <td colspan="7" class="empty">자동 배정 결과가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>선택한 타임 상세 수정</h2>
+            </div>
+            <div class="card-body">
+              <div id="selectedSlotMeta" class="meta-line">캘린더에서 타임을 선택하세요.</div>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>근무자 수</span>
+                  <select id="selectedSlotWorkers">
+                    <option value="1">1명</option>
+                    <option value="2">2명</option>
+                  </select>
+                </label>
+                <label class="field compact-field">
+                  <span>주 담당</span>
+                  <select id="selectedSlotPrimaryManager"></select>
+                </label>
+                <label class="field compact-field">
+                  <span>주 시작</span>
+                  <input id="selectedSlotPrimaryStart" type="time" />
+                </label>
+                <label class="field compact-field">
+                  <span>주 종료</span>
+                  <input id="selectedSlotPrimaryEnd" type="time" />
+                </label>
+              </div>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>보충 담당</span>
+                  <select id="selectedSlotSecondaryManager"></select>
+                </label>
+                <label class="field compact-field">
+                  <span>보충 시작</span>
+                  <input id="selectedSlotSecondaryStart" type="time" />
+                </label>
+                <label class="field compact-field">
+                  <span>보충 종료</span>
+                  <input id="selectedSlotSecondaryEnd" type="time" />
+                </label>
+                <label class="field">
+                  <span>메모</span>
+                  <input id="selectedSlotNote" type="text" placeholder="예: 2명 근무 / 인수인계 포함" />
+                </label>
+                <button id="saveSelectedSlotBtn" class="btn primary" type="button">선택 타임 저장</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>월간 인원 설정 캘린더</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="schedule-headcount-calendar-table">
+                <thead id="scheduleHeadcountCalendarHead">
+                  <tr>
+                    <th>월</th>
+                    <th>화</th>
+                    <th>수</th>
+                    <th>목</th>
+                    <th>금</th>
+                    <th>토</th>
+                    <th>일</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleHeadcountCalendarBody">
+                  <tr>
+                    <td colspan="7" class="empty">인원 설정 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card print-schedule-summary-card">
+            <div class="card-head">
+              <h2>배정 요약</h2>
+            </div>
+            <div class="card-body scroll-x print-schedule-summary">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>배정 T 수</th>
+                    <th>배정 시간</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleSummaryBody">
+                  <tr>
+                    <td colspan="3" class="empty">요약할 배정 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <section id="tab-career" class="tab-panel">
+          <article class="card">
+            <div class="card-head">
+              <h2>직급/시급 기준</h2>
+              <button id="addCareerLevelBtn" class="btn secondary" type="button">직급 추가</button>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>직급명</th>
+                    <th>최소 P</th>
+                    <th>최대 P</th>
+                    <th>시급(원)</th>
+                    <th>삭제</th>
+                  </tr>
+                </thead>
+                <tbody id="careerLevelBody">
+                  <tr>
+                    <td colspan="5" class="empty">직급 기준이 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2>관리자 누적 현황</h2>
+              <div class="inline-fields">
+                <label class="field compact-field">
+                  <span>참조 월</span>
+                  <select id="careerMonthSelect"></select>
+                </label>
+              </div>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>이름</th>
+                    <th>기본 누적 P</th>
+                    <th>기본 누적 시간</th>
+                    <th>1타임 P</th>
+                    <th>배정 T(누적)</th>
+                    <th>배정 시간(누적)</th>
+                    <th>누적 P 합계</th>
+                    <th>현재 직급</th>
+                    <th>적용 시급</th>
+                  </tr>
+                </thead>
+                <tbody id="careerManagerBody">
+                  <tr>
+                    <td colspan="9" class="empty">관리자 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="hint">
+                여기서 계산된 적용 시급은 `근무자 시급 / 야간 기준 설정`의 시급에 자동 반영됩니다.
+              </p>
             </div>
           </article>
         </section>
