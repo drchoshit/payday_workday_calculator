@@ -338,7 +338,8 @@ select:focus {
 
 .table input[type="number"],
 .table input[type="time"],
-.table input[type="text"] {
+.table input[type="text"],
+.table select {
   font-size: 12px;
   padding: 6px 6px;
 }
@@ -349,7 +350,7 @@ select:focus {
 }
 
 .career-manager-table {
-  min-width: 1310px;
+  min-width: 1360px;
   table-layout: fixed;
 }
 
@@ -366,7 +367,7 @@ select:focus {
 
 .career-manager-table th:nth-child(2),
 .career-manager-table td:nth-child(2) {
-  width: 180px;
+  width: 210px;
 }
 
 .career-manager-table th:nth-child(3),
@@ -407,6 +408,19 @@ select:focus {
 .career-manager-table th:nth-child(10),
 .career-manager-table td:nth-child(10) {
   width: 100px;
+}
+
+.career-base-editor {
+  display: grid;
+  grid-template-columns: 64px minmax(90px, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.career-base-editor select,
+.career-base-editor input {
+  width: 100%;
+  min-width: 0;
 }
 
 .tiny-check-grid {

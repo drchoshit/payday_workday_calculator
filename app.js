@@ -31,6 +31,10 @@ const DEFAULT_SETTINGS = {
 const SHIFT_IDS = ["1T", "2T", "3T"];
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const MIN_AUTO_SCHEDULE_MONTH = "2026-05";
+const MANAGER_BASE_MODES = {
+  HOURS: "hours",
+  POINTS: "points",
+};
 
 const DEFAULT_SHIFT_TEMPLATES = [
   { id: "1T", label: "1타임", start: "07:30", end: "15:30" },
@@ -1966,6 +1970,7 @@ function handleScheduleManagerInput(event) {
   }
   if (target.classList.contains("schedule-manager-point")) {
     profile.pointPerShift = Math.min(3, Math.max(1, round2(toNumber(target.value, 1))));
+    syncManagerBaseValues(profile);
     if (event.type === "change") {
       syncCareerRatesToEmployeeSettings();
       renderEmployeeSettingsTable();
@@ -2791,6 +2796,38 @@ function syncManagerProfiles() {
   managers.forEach((name) => ensureManagerProfile(name));
 }
 
+function normalizeManagerBaseMode(value) {
+  return value === MANAGER_BASE_MODES.POINTS ? MANAGER_BASE_MODES.POINTS : MANAGER_BASE_MODES.HOURS;
+}
+
+function syncManagerBaseValues(profile) {
+  const pointPerShift = Math.min(3, Math.max(1, round2(toNumber(profile.pointPerShift, 1))));
+  const baseMode = normalizeManagerBaseMode(profile.baseMode);
+  const baseHours = Math.max(0, round2(toNumber(profile.baseHours, 0)));
+  const basePoints = Math.max(0, round2(toNumber(profile.basePoints, 0)));
+
+  profile.pointPerShift = pointPerShift;
+  profile.baseMode = baseMode;
+
+  if (baseMode === MANAGER_BASE_MODES.POINTS) {
+    profile.basePoints = basePoints;
+    profile.baseHours = round2(basePoints / pointPerShift);
+    return {
+      mode: baseMode,
+      hours: profile.baseHours,
+      points: profile.basePoints,
+    };
+  }
+
+  profile.baseHours = baseHours;
+  profile.basePoints = round2(baseHours * pointPerShift);
+  return {
+    mode: baseMode,
+    hours: profile.baseHours,
+    points: profile.basePoints,
+  };
+}
+
 function ensureManagerProfile(name) {
   const key = cleanText(name);
   if (!key) {
@@ -2803,8 +2840,13 @@ function ensureManagerProfile(name) {
   profile.desiredShifts = Math.max(0, toNumber(profile.desiredShifts, 0));
   profile.priority = Math.max(1, Math.round(toNumber(profile.priority, 5)));
   profile.pointPerShift = Math.min(3, Math.max(1, round2(toNumber(profile.pointPerShift, 1))));
-  profile.basePoints = Math.max(0, round2(toNumber(profile.basePoints, 0)));
-  profile.baseHours = Math.max(0, round2(toNumber(profile.baseHours, 0)));
+  profile.baseMode = normalizeManagerBaseMode(
+    profile.baseMode ||
+      (toNumber(profile.basePoints, 0) > 0 && toNumber(profile.baseHours, 0) <= 0
+        ? MANAGER_BASE_MODES.POINTS
+        : MANAGER_BASE_MODES.HOURS)
+  );
+  syncManagerBaseValues(profile);
   if (!profile.availability || typeof profile.availability !== "object") {
     profile.availability = {};
   }
@@ -2837,6 +2879,7 @@ function createDefaultManagerProfile() {
     desiredShifts: 0,
     priority: 5,
     pointPerShift: 1,
+    baseMode: MANAGER_BASE_MODES.HOURS,
     basePoints: 0,
     baseHours: 0,
     availability,
@@ -3046,11 +3089,23 @@ function renderCareerManagerTable() {
     .map((name) => {
       const profile = ensureManagerProfile(name);
       const snapshot = computeManagerCareerSnapshot(name, state.careerMonth);
+      const isBasePoints = snapshot.baseMode === MANAGER_BASE_MODES.POINTS;
+      const baseInputValue = isBasePoints ? snapshot.basePoints : snapshot.baseHours;
       return `<tr data-name="${escapeHtml(name)}">
         <td>${escapeHtml(name)}</td>
-        <td><input class="career-manager-base-hours" data-name="${escapeHtml(
-          name
-        )}" type="number" min="0" step="0.1" value="${toNumber(profile.baseHours, 0)}" /></td>
+        <td>
+          <div class="career-base-editor">
+            <select class="career-manager-base-mode" data-name="${escapeHtml(
+              name
+            )}" aria-label="${escapeHtml(name)} 기본 누적 입력 기준">
+              <option value="${MANAGER_BASE_MODES.HOURS}" ${isBasePoints ? "" : "selected"}>시간</option>
+              <option value="${MANAGER_BASE_MODES.POINTS}" ${isBasePoints ? "selected" : ""}>P</option>
+            </select>
+            <input class="career-manager-base-value" data-name="${escapeHtml(
+              name
+            )}" aria-label="${escapeHtml(name)} 기본 누적 값" type="number" min="0" step="0.1" value="${baseInputValue}" />
+          </div>
+        </td>
         <td><input class="career-manager-point" data-name="${escapeHtml(
           name
         )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" /></td>
@@ -3068,16 +3123,27 @@ function renderCareerManagerTable() {
 
 function handleCareerManagerInput(event) {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
+  if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) return;
   const name = target.dataset.name;
   if (!name) return;
   const profile = ensureManagerProfile(name);
 
-  if (target.classList.contains("career-manager-base-hours")) {
-    profile.baseHours = Math.max(0, round2(toNumber(target.value, 0)));
+  if (target.classList.contains("career-manager-base-mode")) {
+    profile.baseMode = normalizeManagerBaseMode(target.value);
+    syncManagerBaseValues(profile);
+  }
+  if (target.classList.contains("career-manager-base-value")) {
+    const baseValue = Math.max(0, round2(toNumber(target.value, 0)));
+    if (profile.baseMode === MANAGER_BASE_MODES.POINTS) {
+      profile.basePoints = baseValue;
+    } else {
+      profile.baseHours = baseValue;
+    }
+    syncManagerBaseValues(profile);
   }
   if (target.classList.contains("career-manager-point")) {
     profile.pointPerShift = Math.min(3, Math.max(1, round2(toNumber(target.value, 1))));
+    syncManagerBaseValues(profile);
   }
 
   if (event.type !== "change") {
@@ -3124,13 +3190,14 @@ function computeManagerCareerSnapshot(name, limitMonth) {
   const contribution = getManagerContributionUpToMonth(name, limitMonth);
   const monthlyContribution = getManagerContributionForMonth(name, limitMonth);
   const pointPerShift = Math.min(3, Math.max(1, round2(toNumber(profile.pointPerShift, 1))));
+  const base = syncManagerBaseValues(profile);
   const assignedShiftUnits = round2(contribution.shiftUnits);
   const assignedHours = round2(contribution.hours);
   const monthlyShiftUnits = round2(monthlyContribution.shiftUnits);
   const monthlyHours = round2(monthlyContribution.hours);
   const monthlyPoints = round2(monthlyShiftUnits * pointPerShift);
-  const totalHours = round2(profile.baseHours + assignedHours);
-  const basePoints = round2(profile.baseHours * pointPerShift);
+  const totalHours = round2(base.hours + assignedHours);
+  const basePoints = round2(base.points);
   const totalPoints = round2(basePoints + assignedShiftUnits * pointPerShift);
   const level = resolveCareerLevel(totalPoints);
   const nextLevel = resolveNextCareerLevel(totalPoints);
@@ -3140,8 +3207,9 @@ function computeManagerCareerSnapshot(name, limitMonth) {
   return {
     name,
     pointPerShift,
+    baseMode: base.mode,
     basePoints,
-    baseHours: round2(profile.baseHours),
+    baseHours: round2(base.hours),
     monthlyShiftUnits,
     monthlyHours,
     monthlyPoints,
@@ -4016,14 +4084,25 @@ function normalizeManagerProfiles(value) {
     const pointPerShift = Math.min(3, Math.max(1, round2(toNumber(raw?.pointPerShift, base.pointPerShift))));
     const rawBasePoints = Math.max(0, round2(toNumber(raw?.basePoints, 0)));
     const rawBaseHours = Math.max(0, round2(toNumber(raw?.baseHours, 0)));
+    const hasExplicitBaseMode = raw?.baseMode === MANAGER_BASE_MODES.POINTS || raw?.baseMode === MANAGER_BASE_MODES.HOURS;
+    const baseMode =
+      hasExplicitBaseMode && raw.baseMode === MANAGER_BASE_MODES.POINTS
+        ? MANAGER_BASE_MODES.POINTS
+        : !hasExplicitBaseMode && rawBasePoints > 0 && rawBaseHours <= 0
+        ? MANAGER_BASE_MODES.POINTS
+        : MANAGER_BASE_MODES.HOURS;
+    const derivedBasePoints = rawBasePoints > 0 ? rawBasePoints : round2(rawBaseHours * pointPerShift);
+    const derivedBaseHours = rawBaseHours > 0 ? rawBaseHours : round2(rawBasePoints / pointPerShift);
     const profile = {
       desiredShifts: Math.max(0, toNumber(raw?.desiredShifts, base.desiredShifts)),
       priority: Math.max(1, Math.round(toNumber(raw?.priority, base.priority))),
       pointPerShift,
-      basePoints: rawBasePoints,
-      baseHours: rawBaseHours > 0 ? rawBaseHours : round2(rawBasePoints / pointPerShift),
+      baseMode,
+      basePoints: derivedBasePoints,
+      baseHours: derivedBaseHours,
       availability: base.availability,
     };
+    syncManagerBaseValues(profile);
     if (raw?.availability && typeof raw.availability === "object") {
       for (let day = 0; day < 7; day += 1) {
         if (!profile.availability[day]) profile.availability[day] = {};
