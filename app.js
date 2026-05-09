@@ -65,6 +65,7 @@ const state = {
   careerMonth: cleanText(persisted.careerMonth || ""),
   managerProfiles: normalizeManagerProfiles(persisted.managerProfiles || {}),
   selectedScheduleSlotId: cleanText(persisted.selectedScheduleSlotId || ""),
+  uiDrafts: normalizeUiDrafts(persisted.uiDrafts || {}),
 };
 
 applyDefaultWageMigration();
@@ -131,8 +132,10 @@ const dom = {
   summaryTotalGross: document.getElementById("summaryTotalGross"),
   summaryTotalNet: document.getElementById("summaryTotalNet"),
   monthlyArchiveBody: document.getElementById("monthlyArchiveBody"),
+  saveSummaryPageBtn: document.getElementById("saveSummaryPageBtn"),
 
   scheduleMonthInput: document.getElementById("scheduleMonthInput"),
+  saveSchedulePageBtn: document.getElementById("saveSchedulePageBtn"),
   generateScheduleBtn: document.getElementById("generateScheduleBtn"),
   printScheduleBtn: document.getElementById("printScheduleBtn"),
   shiftTemplateBody: document.getElementById("shiftTemplateBody"),
@@ -168,6 +171,7 @@ const dom = {
   scheduleSummaryBody: document.getElementById("scheduleSummaryBody"),
 
   addCareerLevelBtn: document.getElementById("addCareerLevelBtn"),
+  saveCareerPageBtn: document.getElementById("saveCareerPageBtn"),
   careerLevelBody: document.getElementById("careerLevelBody"),
   careerMonthSelect: document.getElementById("careerMonthSelect"),
   careerManagerBody: document.getElementById("careerManagerBody"),
@@ -240,6 +244,9 @@ function bindEvents() {
   dom.loadAllBtn.addEventListener("click", () => dom.loadStateFileInput.click());
   dom.loadStateFileInput.addEventListener("change", handleLoadStateFile);
   dom.downloadSummaryExcelBtn.addEventListener("click", downloadSummaryExcel);
+  dom.saveSummaryPageBtn.addEventListener("click", () => savePageData("summary", dom.saveSummaryPageBtn));
+  dom.saveSchedulePageBtn.addEventListener("click", () => savePageData("schedule", dom.saveSchedulePageBtn));
+  dom.saveCareerPageBtn.addEventListener("click", () => savePageData("career", dom.saveCareerPageBtn));
 
   bindSettingListeners();
 
@@ -260,19 +267,24 @@ function bindEvents() {
   dom.missingAppliedBody.addEventListener("click", handleAppliedMissingAction);
   dom.monthlyArchiveBody.addEventListener("click", handleMonthlyArchiveAction);
 
-  dom.scheduleMonthInput.addEventListener("change", () => {
-    state.scheduleMonth = cleanText(dom.scheduleMonthInput.value || "");
-    if (!state.careerMonth) {
-      state.careerMonth = state.scheduleMonth;
-    }
-    persistConfig();
-    renderScheduleAi();
-    renderCareer();
-  });
+  dom.scheduleMonthInput.addEventListener("input", handleScheduleMonthInput);
+  dom.scheduleMonthInput.addEventListener("change", handleScheduleMonthInput);
   dom.generateScheduleBtn.addEventListener("click", generateAutoSchedule);
   dom.printScheduleBtn.addEventListener("click", printScheduleCalendar);
   dom.shiftTemplateBody.addEventListener("input", handleShiftTemplateInput);
   dom.shiftTemplateBody.addEventListener("change", handleShiftTemplateInput);
+  [
+    dom.fixedRuleMode,
+    dom.fixedRuleWeekday,
+    dom.fixedRuleDate,
+    dom.fixedRuleShift,
+    dom.fixedRuleManager,
+    dom.fixedRuleNote,
+    dom.newManagerNameInput,
+  ].forEach((input) => {
+    input.addEventListener("input", handleScheduleDraftInput);
+    input.addEventListener("change", handleScheduleDraftInput);
+  });
   dom.addFixedRuleBtn.addEventListener("click", addFixedRule);
   dom.fixedRuleMode.addEventListener("change", syncFixedRuleModeUi);
   dom.fixedRuleBody.addEventListener("click", handleFixedRuleAction);
@@ -287,9 +299,18 @@ function bindEvents() {
   dom.scheduleCalendarBody.addEventListener("click", handleScheduleCalendarClick);
   dom.scheduleHeadcountCalendarBody.addEventListener("click", handleScheduleCalendarClick);
   dom.scheduleHeadcountCalendarBody.addEventListener("change", handleScheduleHeadcountCalendarChange);
-  dom.selectedSlotWorkers.addEventListener("change", () => {
-    const workers = Math.min(2, Math.max(1, Math.round(toNumber(dom.selectedSlotWorkers.value, 1))));
-    toggleSecondaryEditor(workers > 1);
+  [
+    dom.selectedSlotWorkers,
+    dom.selectedSlotPrimaryManager,
+    dom.selectedSlotPrimaryStart,
+    dom.selectedSlotPrimaryEnd,
+    dom.selectedSlotSecondaryManager,
+    dom.selectedSlotSecondaryStart,
+    dom.selectedSlotSecondaryEnd,
+    dom.selectedSlotNote,
+  ].forEach((input) => {
+    input.addEventListener("input", handleSelectedSlotEditorInput);
+    input.addEventListener("change", handleSelectedSlotEditorInput);
   });
   dom.saveSelectedSlotBtn.addEventListener("click", saveSelectedScheduleSlot);
 
@@ -345,6 +366,14 @@ function bindEvents() {
     renderEverything();
     setStatus("선택한 근무기록을 삭제했습니다.");
   });
+
+  window.addEventListener("beforeunload", persistBeforeUnload);
+}
+
+function persistBeforeUnload() {
+  saveScheduleDraftFromInputs();
+  applySelectedScheduleSlotFromInputs();
+  persistConfig();
 }
 
 function bindSettingListeners() {
@@ -398,6 +427,38 @@ function hydrateSettingInputs() {
   dom.defaultNightStartInput.value = state.settings.defaultNightStart;
   dom.nightEndTimeInput.value = state.settings.nightEndTime;
   dom.weeklyThresholdInput.value = String(state.settings.weeklyThresholdHours);
+}
+
+function savePageData(pageKey, button) {
+  if (pageKey === "schedule") {
+    saveScheduleDraftFromInputs();
+    applySelectedScheduleSlotFromInputs();
+    syncManagerProfiles();
+    syncCareerRatesToEmployeeSettings();
+  }
+  if (pageKey === "career") {
+    syncCareerRatesToEmployeeSettings();
+  }
+
+  persistConfig();
+  showSavedButtonFeedback(button);
+  const labels = {
+    summary: "전체 급여 요약",
+    schedule: "관리자 근무 일정 배정AI",
+    career: "관리자 누적/직급 관리",
+  };
+  setStatus(`${labels[pageKey] || "현재 페이지"} 데이터를 저장했습니다.`);
+}
+
+function showSavedButtonFeedback(button) {
+  if (!(button instanceof HTMLButtonElement)) return;
+  const original = button.textContent;
+  button.textContent = "저장됨";
+  button.disabled = true;
+  setTimeout(() => {
+    button.textContent = original;
+    button.disabled = false;
+  }, 900);
 }
 
 function switchTab(tabName) {
@@ -1613,6 +1674,18 @@ function renderScheduleMonthInput() {
   }
 }
 
+function handleScheduleMonthInput() {
+  const month = cleanText(dom.scheduleMonthInput.value || "");
+  if (!/^\d{4}-\d{2}$/.test(month)) return;
+  state.scheduleMonth = month;
+  if (!state.careerMonth) {
+    state.careerMonth = state.scheduleMonth;
+  }
+  persistConfig();
+  renderScheduleAi();
+  renderCareer();
+}
+
 function renderShiftTemplateTable() {
   if (!state.scheduleTemplates.length) {
     dom.shiftTemplateBody.innerHTML = '<tr><td colspan="3" class="empty">타임 설정이 없습니다.</td></tr>';
@@ -1689,7 +1762,56 @@ function renderFixedRuleSelectors() {
       )
       .join("");
 
+  restoreScheduleDraftInputs();
   syncFixedRuleModeUi();
+}
+
+function getScheduleDrafts() {
+  if (!state.uiDrafts || typeof state.uiDrafts !== "object") {
+    state.uiDrafts = normalizeUiDrafts({});
+  }
+  if (!state.uiDrafts.schedule || typeof state.uiDrafts.schedule !== "object") {
+    state.uiDrafts.schedule = normalizeUiDrafts({}).schedule;
+  }
+  return state.uiDrafts.schedule;
+}
+
+function restoreScheduleDraftInputs() {
+  const draft = getScheduleDrafts();
+  dom.fixedRuleMode.value = draft.fixedRuleMode || "weekly";
+  dom.fixedRuleWeekday.value = String(draft.fixedRuleWeekday ?? 1);
+  dom.fixedRuleDate.value = draft.fixedRuleDate || "";
+  setSelectValueIfOptionExists(dom.fixedRuleShift, draft.fixedRuleShift);
+  setSelectValueIfOptionExists(dom.fixedRuleManager, draft.fixedRuleManager);
+  dom.fixedRuleNote.value = draft.fixedRuleNote || "";
+  dom.newManagerNameInput.value = draft.newManagerName || "";
+}
+
+function setSelectValueIfOptionExists(select, value) {
+  const cleanValue = cleanText(value);
+  if (!cleanValue) return;
+  if (Array.from(select.options).some((option) => option.value === cleanValue)) {
+    select.value = cleanValue;
+  }
+}
+
+function handleScheduleDraftInput(event) {
+  saveScheduleDraftFromInputs();
+  if (event.target === dom.fixedRuleMode) {
+    syncFixedRuleModeUi();
+  }
+  persistConfig();
+}
+
+function saveScheduleDraftFromInputs() {
+  const draft = getScheduleDrafts();
+  draft.fixedRuleMode = dom.fixedRuleMode.value === "date" ? "date" : "weekly";
+  draft.fixedRuleWeekday = Math.max(0, Math.min(6, Math.round(toNumber(dom.fixedRuleWeekday.value, 1))));
+  draft.fixedRuleDate = cleanText(dom.fixedRuleDate.value);
+  draft.fixedRuleShift = cleanText(dom.fixedRuleShift.value);
+  draft.fixedRuleManager = stripManagerTitle(cleanText(dom.fixedRuleManager.value));
+  draft.fixedRuleNote = cleanText(dom.fixedRuleNote.value);
+  draft.newManagerName = cleanText(dom.newManagerNameInput.value);
 }
 
 function syncFixedRuleModeUi() {
@@ -1725,6 +1847,7 @@ function addFixedRule() {
   }
 
   state.scheduleFixedRules.push(rule);
+  getScheduleDrafts().fixedRuleNote = "";
   persistConfig();
   renderScheduleAi();
 
@@ -1887,6 +2010,7 @@ function addManagerRow() {
   state.managerProfiles[name] = createDefaultManagerProfile();
   ensureEmployeeSetting(name);
   dom.newManagerNameInput.value = "";
+  getScheduleDrafts().newManagerName = "";
   syncCareerRatesToEmployeeSettings();
   persistConfig();
   renderScheduleAi();
@@ -2418,10 +2542,41 @@ function renderSelectedSlotEditor() {
 }
 
 function saveSelectedScheduleSlot() {
-  const row = getSelectedScheduleSlot();
-  if (!row) {
+  if (!applySelectedScheduleSlotFromInputs()) {
     setStatus("먼저 캘린더에서 수정할 타임을 선택하세요.", true);
     return;
+  }
+
+  persistConfig();
+  renderScheduleAi();
+  renderCareer();
+  renderEmployeeSettingsTable();
+  renderStatement();
+  renderSummary();
+}
+
+function handleSelectedSlotEditorInput(event) {
+  if (event.target === dom.selectedSlotWorkers) {
+    const workers = Math.min(2, Math.max(1, Math.round(toNumber(dom.selectedSlotWorkers.value, 1))));
+    toggleSecondaryEditor(workers > 1);
+  }
+  if (!applySelectedScheduleSlotFromInputs()) return;
+
+  persistConfig();
+  if (event.target === dom.selectedSlotNote) return;
+  renderScheduleResultTable();
+  renderScheduleHeadcountCalendarTable();
+  renderScheduleSummaryTable();
+  renderCareer();
+  renderEmployeeSettingsTable();
+  renderStatement();
+  renderSummary();
+}
+
+function applySelectedScheduleSlotFromInputs() {
+  const row = getSelectedScheduleSlot();
+  if (!row) {
+    return false;
   }
 
   const workerSlots = Math.min(2, Math.max(1, Math.round(toNumber(dom.selectedSlotWorkers.value, 1))));
@@ -2453,12 +2608,7 @@ function saveSelectedScheduleSlot() {
 
   syncManagerProfiles();
   syncCareerRatesToEmployeeSettings();
-  persistConfig();
-  renderScheduleAi();
-  renderCareer();
-  renderEmployeeSettingsTable();
-  renderStatement();
-  renderSummary();
+  return true;
 }
 
 function toggleSecondaryEditor(enabled) {
@@ -3866,6 +4016,24 @@ function normalizeManagerProfiles(value) {
   return next;
 }
 
+function normalizeUiDrafts(value) {
+  const schedule = value?.schedule && typeof value.schedule === "object" ? value.schedule : {};
+  const fixedRuleMode = schedule.fixedRuleMode === "date" ? "date" : "weekly";
+  return {
+    schedule: {
+      fixedRuleMode,
+      fixedRuleWeekday: Math.max(0, Math.min(6, Math.round(toNumber(schedule.fixedRuleWeekday, 1)))),
+      fixedRuleDate: /^\d{4}-\d{2}-\d{2}$/.test(cleanText(schedule.fixedRuleDate))
+        ? cleanText(schedule.fixedRuleDate)
+        : "",
+      fixedRuleShift: cleanText(schedule.fixedRuleShift),
+      fixedRuleManager: stripManagerTitle(cleanText(schedule.fixedRuleManager)),
+      fixedRuleNote: cleanText(schedule.fixedRuleNote),
+      newManagerName: cleanText(schedule.newManagerName),
+    },
+  };
+}
+
 function normalizeCareerLevels(list) {
   const source = Array.isArray(list) ? list : [];
   const mapped = source
@@ -3916,6 +4084,7 @@ function buildPersistPayload() {
     careerMonth: state.careerMonth,
     managerProfiles: state.managerProfiles,
     selectedScheduleSlotId: state.selectedScheduleSlotId,
+    uiDrafts: state.uiDrafts,
   };
 }
 
@@ -4079,6 +4248,7 @@ function restoreFromImportedData(data) {
   state.careerMonth = cleanText(data.careerMonth || "");
   state.managerProfiles = normalizeManagerProfiles(data.managerProfiles || {});
   state.selectedScheduleSlotId = cleanText(data.selectedScheduleSlotId || "");
+  state.uiDrafts = normalizeUiDrafts(data.uiDrafts || {});
   applyDefaultWageMigration();
   initializeAdvancedDefaults();
   syncEmployeeSettings();
