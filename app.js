@@ -3038,7 +3038,7 @@ function handleCareerLevelAction(event) {
 function renderCareerManagerTable() {
   const managers = getManagerNames();
   if (!managers.length) {
-    dom.careerManagerBody.innerHTML = '<tr><td colspan="11" class="empty">관리자 데이터가 없습니다.</td></tr>';
+    dom.careerManagerBody.innerHTML = '<tr><td colspan="10" class="empty">관리자 데이터가 없습니다.</td></tr>';
     return;
   }
 
@@ -3046,24 +3046,21 @@ function renderCareerManagerTable() {
     .map((name) => {
       const profile = ensureManagerProfile(name);
       const snapshot = computeManagerCareerSnapshot(name, state.careerMonth);
-      return `<tr>
+      return `<tr data-name="${escapeHtml(name)}">
         <td>${escapeHtml(name)}</td>
-        <td><input class="career-manager-base-points" data-name="${escapeHtml(
-          name
-        )}" type="number" min="0" step="0.1" value="${toNumber(profile.basePoints, 0)}" /></td>
         <td><input class="career-manager-base-hours" data-name="${escapeHtml(
           name
         )}" type="number" min="0" step="0.1" value="${toNumber(profile.baseHours, 0)}" /></td>
         <td><input class="career-manager-point" data-name="${escapeHtml(
           name
         )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" /></td>
-        <td>${round2(snapshot.assignedShiftUnits)}T</td>
-        <td>${formatDurationText(snapshot.assignedHours)}</td>
-        <td>${formatDurationText(snapshot.totalHours)}</td>
-        <td>${formatPointText(snapshot.totalPoints)}</td>
-        <td>${escapeHtml(snapshot.levelName)}</td>
-        <td>${escapeHtml(formatPromotionRemaining(snapshot))}</td>
-        <td>${formatWon(snapshot.appliedWage)}</td>
+        <td class="career-assigned-shifts">${formatShiftUnitText(snapshot.assignedShiftUnits)}</td>
+        <td class="career-assigned-hours">${formatDurationText(snapshot.assignedHours)}</td>
+        <td class="career-total-hours">${formatDurationText(snapshot.totalHours)}</td>
+        <td class="career-total-points">${formatPointText(snapshot.totalPoints)}</td>
+        <td class="career-level-name">${escapeHtml(snapshot.levelName)}</td>
+        <td class="career-promotion-remaining">${escapeHtml(formatPromotionRemaining(snapshot))}</td>
+        <td class="career-applied-wage">${formatWon(snapshot.appliedWage)}</td>
       </tr>`;
     })
     .join("");
@@ -3076,9 +3073,6 @@ function handleCareerManagerInput(event) {
   if (!name) return;
   const profile = ensureManagerProfile(name);
 
-  if (target.classList.contains("career-manager-base-points")) {
-    profile.basePoints = Math.max(0, round2(toNumber(target.value, 0)));
-  }
   if (target.classList.contains("career-manager-base-hours")) {
     profile.baseHours = Math.max(0, round2(toNumber(target.value, 0)));
   }
@@ -3087,6 +3081,8 @@ function handleCareerManagerInput(event) {
   }
 
   if (event.type !== "change") {
+    syncCareerRatesToEmployeeSettings();
+    updateCareerManagerComputedRow(name);
     persistConfig();
     return;
   }
@@ -3100,6 +3096,29 @@ function handleCareerManagerInput(event) {
   renderSummary();
 }
 
+function updateCareerManagerComputedRow(name) {
+  const row = Array.from(dom.careerManagerBody.querySelectorAll("tr")).find(
+    (item) => item.dataset.name === name
+  );
+  if (!row) return;
+
+  const snapshot = computeManagerCareerSnapshot(name, state.careerMonth);
+  const cells = {
+    ".career-assigned-shifts": formatShiftUnitText(snapshot.assignedShiftUnits),
+    ".career-assigned-hours": formatDurationText(snapshot.assignedHours),
+    ".career-total-hours": formatDurationText(snapshot.totalHours),
+    ".career-total-points": formatPointText(snapshot.totalPoints),
+    ".career-level-name": escapeHtml(snapshot.levelName),
+    ".career-promotion-remaining": escapeHtml(formatPromotionRemaining(snapshot)),
+    ".career-applied-wage": formatWon(snapshot.appliedWage),
+  };
+
+  Object.entries(cells).forEach(([selector, value]) => {
+    const cell = row.querySelector(selector);
+    if (cell) cell.innerHTML = value;
+  });
+}
+
 function computeManagerCareerSnapshot(name, limitMonth) {
   const profile = ensureManagerProfile(name);
   const contribution = getManagerContributionUpToMonth(name, limitMonth);
@@ -3111,7 +3130,8 @@ function computeManagerCareerSnapshot(name, limitMonth) {
   const monthlyHours = round2(monthlyContribution.hours);
   const monthlyPoints = round2(monthlyShiftUnits * pointPerShift);
   const totalHours = round2(profile.baseHours + assignedHours);
-  const totalPoints = round2(profile.basePoints + assignedShiftUnits * pointPerShift);
+  const basePoints = round2(profile.baseHours * pointPerShift);
+  const totalPoints = round2(basePoints + assignedShiftUnits * pointPerShift);
   const level = resolveCareerLevel(totalPoints);
   const nextLevel = resolveNextCareerLevel(totalPoints);
   const pointsToNextLevel = nextLevel ? round2(Math.max(0, toNumber(nextLevel.min, 0) - totalPoints)) : 0;
@@ -3120,7 +3140,7 @@ function computeManagerCareerSnapshot(name, limitMonth) {
   return {
     name,
     pointPerShift,
-    basePoints: round2(profile.basePoints),
+    basePoints,
     baseHours: round2(profile.baseHours),
     monthlyShiftUnits,
     monthlyHours,
@@ -3993,12 +4013,15 @@ function normalizeManagerProfiles(value) {
     const key = stripManagerTitle(cleanText(name));
     if (!key) return;
     const base = createDefaultManagerProfile();
+    const pointPerShift = Math.min(3, Math.max(1, round2(toNumber(raw?.pointPerShift, base.pointPerShift))));
+    const rawBasePoints = Math.max(0, round2(toNumber(raw?.basePoints, 0)));
+    const rawBaseHours = Math.max(0, round2(toNumber(raw?.baseHours, 0)));
     const profile = {
       desiredShifts: Math.max(0, toNumber(raw?.desiredShifts, base.desiredShifts)),
       priority: Math.max(1, Math.round(toNumber(raw?.priority, base.priority))),
-      pointPerShift: Math.min(3, Math.max(1, round2(toNumber(raw?.pointPerShift, base.pointPerShift)))),
-      basePoints: Math.max(0, round2(toNumber(raw?.basePoints, 0))),
-      baseHours: Math.max(0, round2(toNumber(raw?.baseHours, 0))),
+      pointPerShift,
+      basePoints: rawBasePoints,
+      baseHours: rawBaseHours > 0 ? rawBaseHours : round2(rawBasePoints / pointPerShift),
       availability: base.availability,
     };
     if (raw?.availability && typeof raw.availability === "object") {

@@ -349,7 +349,7 @@ select:focus {
 }
 
 .career-manager-table {
-  min-width: 1490px;
+  min-width: 1310px;
   table-layout: fixed;
 }
 
@@ -365,49 +365,47 @@ select:focus {
 }
 
 .career-manager-table th:nth-child(2),
-.career-manager-table td:nth-child(2),
+.career-manager-table td:nth-child(2) {
+  width: 180px;
+}
+
 .career-manager-table th:nth-child(3),
 .career-manager-table td:nth-child(3) {
-  width: 180px;
+  width: 100px;
 }
 
 .career-manager-table th:nth-child(4),
 .career-manager-table td:nth-child(4) {
-  width: 100px;
+  width: 132px;
 }
 
 .career-manager-table th:nth-child(5),
 .career-manager-table td:nth-child(5) {
-  width: 132px;
+  width: 150px;
 }
 
 .career-manager-table th:nth-child(6),
 .career-manager-table td:nth-child(6) {
-  width: 150px;
+  width: 140px;
 }
 
 .career-manager-table th:nth-child(7),
 .career-manager-table td:nth-child(7) {
-  width: 140px;
+  width: 110px;
 }
 
 .career-manager-table th:nth-child(8),
 .career-manager-table td:nth-child(8) {
-  width: 110px;
+  width: 92px;
 }
 
 .career-manager-table th:nth-child(9),
 .career-manager-table td:nth-child(9) {
-  width: 92px;
+  width: 230px;
 }
 
 .career-manager-table th:nth-child(10),
 .career-manager-table td:nth-child(10) {
-  width: 230px;
-}
-
-.career-manager-table th:nth-child(11),
-.career-manager-table td:nth-child(11) {
   width: 100px;
 }
 
