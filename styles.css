@@ -348,6 +348,69 @@ select:focus {
   min-width: 110px;
 }
 
+.career-manager-table {
+  min-width: 1490px;
+  table-layout: fixed;
+}
+
+.career-manager-table th,
+.career-manager-table td {
+  white-space: nowrap;
+  word-break: keep-all;
+}
+
+.career-manager-table th:nth-child(1),
+.career-manager-table td:nth-child(1) {
+  width: 76px;
+}
+
+.career-manager-table th:nth-child(2),
+.career-manager-table td:nth-child(2),
+.career-manager-table th:nth-child(3),
+.career-manager-table td:nth-child(3) {
+  width: 180px;
+}
+
+.career-manager-table th:nth-child(4),
+.career-manager-table td:nth-child(4) {
+  width: 100px;
+}
+
+.career-manager-table th:nth-child(5),
+.career-manager-table td:nth-child(5) {
+  width: 132px;
+}
+
+.career-manager-table th:nth-child(6),
+.career-manager-table td:nth-child(6) {
+  width: 150px;
+}
+
+.career-manager-table th:nth-child(7),
+.career-manager-table td:nth-child(7) {
+  width: 140px;
+}
+
+.career-manager-table th:nth-child(8),
+.career-manager-table td:nth-child(8) {
+  width: 110px;
+}
+
+.career-manager-table th:nth-child(9),
+.career-manager-table td:nth-child(9) {
+  width: 92px;
+}
+
+.career-manager-table th:nth-child(10),
+.career-manager-table td:nth-child(10) {
+  width: 230px;
+}
+
+.career-manager-table th:nth-child(11),
+.career-manager-table td:nth-child(11) {
+  width: 100px;
+}
+
 .tiny-check-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -770,7 +833,13 @@ select:focus {
 
 .statement-career-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns:
+    minmax(92px, 0.75fr)
+    minmax(118px, 0.85fr)
+    minmax(130px, 0.95fr)
+    minmax(104px, 0.8fr)
+    minmax(118px, 0.85fr)
+    minmax(280px, 1.55fr);
   gap: 8px;
 }
 
@@ -794,7 +863,12 @@ select:focus {
   font-size: 15px;
   color: var(--ink-900);
   word-break: keep-all;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.statement-career-item.promotion {
+  min-width: 280px;
 }
 
 .badge {
@@ -846,6 +920,15 @@ select:focus {
     grid-template-columns: 1fr;
   }
 
+  .statement-career-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .statement-career-item.promotion {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
   .compact-field {
     min-width: 100%;
   }
@@ -858,6 +941,10 @@ select:focus {
 
   .app-header {
     padding: 20px 18px;
+  }
+
+  .statement-career-item.promotion strong {
+    white-space: normal;
   }
 
   .inline-fields {

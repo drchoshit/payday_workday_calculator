@@ -1355,7 +1355,7 @@ function renderStatementCareerStats(name, month) {
         <span>현재 직급</span>
         <strong>${escapeHtml(snapshot.levelName)}</strong>
       </div>
-      <div class="statement-career-item">
+      <div class="statement-career-item promotion">
         <span>다음 승진까지</span>
         <strong>${escapeHtml(formatPromotionRemaining(snapshot))}</strong>
       </div>
