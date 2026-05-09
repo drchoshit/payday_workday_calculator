@@ -752,6 +752,51 @@ select:focus {
   font-weight: 600;
 }
 
+.statement-career-stats {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.statement-career-stats[hidden] {
+  display: none;
+}
+
+.statement-career-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #29417d;
+}
+
+.statement-career-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.statement-career-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  background: var(--surface-soft);
+  border: 1px solid #d8e4ff;
+  border-radius: 10px;
+  padding: 9px 10px;
+}
+
+.statement-career-item span {
+  font-size: 12px;
+  color: var(--ink-700);
+}
+
+.statement-career-item strong {
+  font-size: 15px;
+  color: var(--ink-900);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
 .badge {
   display: inline-block;
   font-size: 12px;

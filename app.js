@@ -116,6 +116,7 @@ const dom = {
   statementEmployeeSelect: document.getElementById("statementEmployeeSelect"),
   printStatementBtn: document.getElementById("printStatementBtn"),
   statementMeta: document.getElementById("statementMeta"),
+  statementCareerStats: document.getElementById("statementCareerStats"),
   statementBody: document.getElementById("statementBody"),
   weeklySummaryBody: document.getElementById("weeklySummaryBody"),
   totalHoursCell: document.getElementById("totalHoursCell"),
@@ -1244,6 +1245,7 @@ function renderPreview() {
 function renderStatement() {
   if (!state.selectedMonth || !state.selectedEmployee) {
     dom.statementMeta.textContent = "근무자와 정산 월을 선택하세요.";
+    renderStatementCareerStats("", "");
     dom.statementBody.innerHTML =
       '<tr><td colspan="12" class="empty">표시할 근무 내역이 없습니다.</td></tr>';
     dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
@@ -1252,11 +1254,12 @@ function renderStatement() {
   }
 
   const payroll = computeEmployeeMonthPayroll(state.selectedEmployee, state.selectedMonth);
-  const employeeConfig = ensureEmployeeSetting(state.selectedEmployee);
+  const hourlyRate = getEffectiveHourlyRate(state.selectedEmployee, state.selectedMonth);
 
   dom.statementMeta.textContent = `${formatMonthLabel(state.selectedMonth)} · ${
     state.selectedEmployee
-  } · 시급 ${formatWon(employeeConfig.hourlyRate)} · ${payroll.shifts.length}건`;
+  } · 시급 ${formatWon(hourlyRate)} · ${payroll.shifts.length}건`;
+  renderStatementCareerStats(state.selectedEmployee, state.selectedMonth);
 
   if (!payroll.shifts.length) {
     dom.statementBody.innerHTML =
@@ -1313,6 +1316,51 @@ function renderStatement() {
   dom.allowanceCell.textContent = formatWon(payroll.totals.allowances);
   dom.grossPayCell.textContent = formatWon(payroll.totals.grossPay);
   dom.netPayCell.textContent = formatWon(payroll.totals.netPay);
+}
+
+function renderStatementCareerStats(name, month) {
+  if (!dom.statementCareerStats) return;
+
+  const cleanName = cleanText(name);
+  if (!cleanName || !hasManagerCareerData(cleanName)) {
+    dom.statementCareerStats.innerHTML = "";
+    dom.statementCareerStats.hidden = true;
+    return;
+  }
+
+  const snapshot = computeManagerCareerSnapshot(cleanName, month);
+  dom.statementCareerStats.hidden = false;
+  dom.statementCareerStats.innerHTML = `
+    <div class="statement-career-title">관리자 누적/직급</div>
+    <div class="statement-career-grid">
+      <div class="statement-career-item">
+        <span>1타임 P배율</span>
+        <strong>${formatPointMultiplier(snapshot.pointPerShift)}</strong>
+      </div>
+      <div class="statement-career-item">
+        <span>이번달 T / P</span>
+        <strong>${formatShiftUnitText(snapshot.monthlyShiftUnits)} / ${formatPointText(
+          snapshot.monthlyPoints
+        )}</strong>
+      </div>
+      <div class="statement-career-item">
+        <span>누적 시간</span>
+        <strong>${formatDurationText(snapshot.totalHours)}</strong>
+      </div>
+      <div class="statement-career-item">
+        <span>누적 P</span>
+        <strong>${formatPointText(snapshot.totalPoints)}</strong>
+      </div>
+      <div class="statement-career-item">
+        <span>현재 직급</span>
+        <strong>${escapeHtml(snapshot.levelName)}</strong>
+      </div>
+      <div class="statement-career-item">
+        <span>다음 승진까지</span>
+        <strong>${escapeHtml(formatPromotionRemaining(snapshot))}</strong>
+      </div>
+    </div>
+  `;
 }
 
 function renderTotalsEmpty() {
@@ -2673,6 +2721,17 @@ function getManagerNames() {
   return Array.from(names).sort((a, b) => a.localeCompare(b, "ko-KR"));
 }
 
+function hasManagerCareerData(name) {
+  const key = cleanText(name);
+  if (!key) return false;
+  if (state.managerProfiles?.[key]) return true;
+  if (state.entries.some((entry) => entry.name === key && isManagerCategory(entry.category))) return true;
+  if (state.scheduleFixedRules.some((rule) => rule.manager === key)) return true;
+  return Object.values(state.scheduleAssignments || {}).some((rows) =>
+    rows.some((row) => row.primaryManager === key || row.secondaryManager === key)
+  );
+}
+
 function isManagerCategory(category) {
   return /관리/.test(cleanText(category));
 }
@@ -2829,7 +2888,7 @@ function handleCareerLevelAction(event) {
 function renderCareerManagerTable() {
   const managers = getManagerNames();
   if (!managers.length) {
-    dom.careerManagerBody.innerHTML = '<tr><td colspan="9" class="empty">관리자 데이터가 없습니다.</td></tr>';
+    dom.careerManagerBody.innerHTML = '<tr><td colspan="11" class="empty">관리자 데이터가 없습니다.</td></tr>';
     return;
   }
 
@@ -2850,8 +2909,10 @@ function renderCareerManagerTable() {
         )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" /></td>
         <td>${round2(snapshot.assignedShiftUnits)}T</td>
         <td>${formatDurationText(snapshot.assignedHours)}</td>
-        <td>${round2(snapshot.totalPoints)}P</td>
+        <td>${formatDurationText(snapshot.totalHours)}</td>
+        <td>${formatPointText(snapshot.totalPoints)}</td>
         <td>${escapeHtml(snapshot.levelName)}</td>
+        <td>${escapeHtml(formatPromotionRemaining(snapshot))}</td>
         <td>${formatWon(snapshot.appliedWage)}</td>
       </tr>`;
     })
@@ -2892,44 +2953,100 @@ function handleCareerManagerInput(event) {
 function computeManagerCareerSnapshot(name, limitMonth) {
   const profile = ensureManagerProfile(name);
   const contribution = getManagerContributionUpToMonth(name, limitMonth);
+  const monthlyContribution = getManagerContributionForMonth(name, limitMonth);
+  const pointPerShift = Math.min(3, Math.max(1, round2(toNumber(profile.pointPerShift, 1))));
   const assignedShiftUnits = round2(contribution.shiftUnits);
   const assignedHours = round2(contribution.hours);
-  const totalPoints = round2(profile.basePoints + assignedShiftUnits * profile.pointPerShift);
+  const monthlyShiftUnits = round2(monthlyContribution.shiftUnits);
+  const monthlyHours = round2(monthlyContribution.hours);
+  const monthlyPoints = round2(monthlyShiftUnits * pointPerShift);
+  const totalHours = round2(profile.baseHours + assignedHours);
+  const totalPoints = round2(profile.basePoints + assignedShiftUnits * pointPerShift);
   const level = resolveCareerLevel(totalPoints);
+  const nextLevel = resolveNextCareerLevel(totalPoints);
+  const pointsToNextLevel = nextLevel ? round2(Math.max(0, toNumber(nextLevel.min, 0) - totalPoints)) : 0;
+  const shiftUnitsToNextLevel = nextLevel ? round2(pointsToNextLevel / pointPerShift) : 0;
   const appliedWage = level ? level.wage : ensureEmployeeSetting(name).hourlyRate;
   return {
     name,
+    pointPerShift,
+    basePoints: round2(profile.basePoints),
+    baseHours: round2(profile.baseHours),
+    monthlyShiftUnits,
+    monthlyHours,
+    monthlyPoints,
     assignedShiftUnits,
     assignedHours,
+    totalHours,
     totalPoints,
     levelName: level ? level.name : "-",
+    nextLevelName: nextLevel ? nextLevel.name : "",
+    pointsToNextLevel,
+    shiftUnitsToNextLevel,
     appliedWage: Math.max(0, roundCurrency(appliedWage)),
+  };
+}
+
+function getManagerContributionForMonth(name, month) {
+  const key = cleanText(month || "");
+  if (!/^\d{4}-\d{2}$/.test(key)) {
+    return { shiftUnits: 0, hours: 0 };
+  }
+  const scheduled = getScheduledManagerContributionForMonth(name, key);
+  const contribution =
+    scheduled.shiftUnits > 0 || scheduled.hours > 0
+      ? scheduled
+      : getManagerPayrollContributionForMonth(name, key);
+  return {
+    shiftUnits: round2(contribution.shiftUnits),
+    hours: round2(contribution.hours),
   };
 }
 
 function getManagerContributionUpToMonth(name, limitMonth) {
   const result = { shiftUnits: 0, hours: 0 };
-  const months = Object.keys(state.scheduleAssignments || {})
+  const months = Array.from(
+    new Set([...Object.keys(state.scheduleAssignments || {}), ...getAvailableMonths()])
+  )
     .filter((month) => /^\d{4}-\d{2}$/.test(month))
     .sort();
 
   months.forEach((month) => {
     if (limitMonth && month > limitMonth) return;
-    const rows = getScheduleRowsForMonth(month);
-    rows.forEach((row) => {
-      const temp = new Map();
-      addScheduleRowContribution(temp, row);
-      const info = temp.get(name);
-      if (!info) return;
-      result.shiftUnits += info.shiftUnits;
-      result.hours += info.hours;
-    });
+    const info = getManagerContributionForMonth(name, month);
+    result.shiftUnits += info.shiftUnits;
+    result.hours += info.hours;
   });
 
   return {
     shiftUnits: round2(result.shiftUnits),
     hours: round2(result.hours),
   };
+}
+
+function getScheduledManagerContributionForMonth(name, month) {
+  const result = new Map();
+  const rows = Array.isArray(state.scheduleAssignments?.[month]) ? state.scheduleAssignments[month] : [];
+  rows.forEach((row) => addScheduleRowContribution(result, row));
+  const contribution = result.get(name) || { shiftUnits: 0, hours: 0 };
+  return {
+    shiftUnits: round2(contribution.shiftUnits),
+    hours: round2(contribution.hours),
+  };
+}
+
+function getManagerPayrollContributionForMonth(name, month) {
+  const entries = state.entries.filter((entry) => entry.name === name && entry.workDate.startsWith(month));
+  return entries.reduce(
+    (acc, entry) => {
+      const hours = Math.max(0, toNumber(entry.adjustedHours, 0));
+      if (hours <= 0) return acc;
+      acc.shiftUnits += 1;
+      acc.hours += hours;
+      return acc;
+    },
+    { shiftUnits: 0, hours: 0 }
+  );
 }
 
 function resolveCareerLevel(points) {
@@ -2942,6 +3059,23 @@ function resolveCareerLevel(points) {
       return target >= min && target <= max;
     }) || null
   );
+}
+
+function resolveNextCareerLevel(points) {
+  const target = toNumber(points, 0);
+  return (
+    state.careerLevels
+      .slice()
+      .sort((a, b) => toNumber(a.min, 0) - toNumber(b.min, 0))
+      .find((level) => target < toNumber(level.min, 0)) || null
+  );
+}
+
+function formatPromotionRemaining(snapshot) {
+  if (!snapshot.nextLevelName) return "최고 직급";
+  return `${snapshot.nextLevelName}까지 ${formatShiftUnitText(
+    snapshot.shiftUnitsToNextLevel
+  )} / ${formatPointText(snapshot.pointsToNextLevel)}`;
 }
 
 function syncCareerRatesToEmployeeSettings() {
@@ -2960,9 +3094,18 @@ function syncCareerRatesToEmployeeSettings() {
   return changed;
 }
 
+function getEffectiveHourlyRate(name, month) {
+  const config = ensureEmployeeSetting(name);
+  if (hasManagerCareerData(name)) {
+    const snapshot = computeManagerCareerSnapshot(name, month);
+    return Math.max(0, roundCurrency(snapshot.appliedWage));
+  }
+  return Math.max(0, toNumber(config.hourlyRate, state.settings.defaultHourlyWage));
+}
+
 function computeEmployeeMonthPayroll(name, month) {
   const config = ensureEmployeeSetting(name);
-  const hourlyRate = Math.max(0, toNumber(config.hourlyRate, state.settings.defaultHourlyWage));
+  const hourlyRate = getEffectiveHourlyRate(name, month);
 
   const shifts = state.entries
     .filter((entry) => entry.name === name && entry.workDate.startsWith(month))
@@ -3400,6 +3543,18 @@ function formatTimeFromIso(iso) {
 function formatHours(value) {
   const fixed = round2(toNumber(value, 0)).toFixed(2);
   return fixed.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
+function formatPointMultiplier(value) {
+  return `${formatHours(round2(toNumber(value, 0) * 100))}%`;
+}
+
+function formatPointText(value) {
+  return `${formatHours(value)}P`;
+}
+
+function formatShiftUnitText(value) {
+  return `${formatHours(value)}T`;
 }
 
 function formatDurationText(value) {
