@@ -2200,13 +2200,13 @@ function buildAutoScheduleForMonth(month, managers) {
       if (manager) {
         const current = assignmentMap.get(manager) || { shiftUnits: 0, hours: 0 };
         current.hours += shiftHours;
-        current.shiftUnits = calculateShiftUnitsFromHours(current.hours);
+        current.shiftUnits += 1;
         assignmentMap.set(manager, current);
       }
       if (secondaryManager) {
         const current = assignmentMap.get(secondaryManager) || { shiftUnits: 0, hours: 0 };
         current.hours += shiftHours;
-        current.shiftUnits = calculateShiftUnitsFromHours(current.hours);
+        current.shiftUnits += 1;
         assignmentMap.set(secondaryManager, current);
       }
 
@@ -2543,7 +2543,7 @@ function autoFillManagersForRow(row, rows) {
           ? calculateTimeRangeHours(item.date, item.primaryStart, item.primaryEnd)
           : shiftHours;
       current.hours += primaryHours;
-      current.shiftUnits = calculateShiftUnitsFromHours(current.hours);
+      current.shiftUnits += 1;
       assignmentMap.set(item.primaryManager, current);
     }
     if (item.secondaryManager) {
@@ -2553,7 +2553,7 @@ function autoFillManagersForRow(row, rows) {
           ? calculateTimeRangeHours(item.date, item.secondaryStart, item.secondaryEnd)
           : shiftHours;
       current.hours += secondaryHours;
-      current.shiftUnits = calculateShiftUnitsFromHours(current.hours);
+      current.shiftUnits += 1;
       assignmentMap.set(item.secondaryManager, current);
     }
   });
@@ -2819,13 +2819,13 @@ function addScheduleRowContribution(map, row) {
   if (row.primaryManager) {
     const info = map.get(row.primaryManager) || { shiftUnits: 0, hours: 0 };
     info.hours += primaryHours;
-    info.shiftUnits = calculateShiftUnitsFromHours(info.hours);
+    info.shiftUnits += 1;
     map.set(row.primaryManager, info);
   }
   if (row.secondaryManager) {
     const info = map.get(row.secondaryManager) || { shiftUnits: 0, hours: 0 };
     info.hours += secondaryHours;
-    info.shiftUnits = calculateShiftUnitsFromHours(info.hours);
+    info.shiftUnits += 1;
     map.set(row.secondaryManager, info);
   }
 }
