@@ -104,6 +104,8 @@ const dom = {
   addHolidayBtn: document.getElementById("addHolidayBtn"),
   holidayList: document.getElementById("holidayList"),
 
+  addManagerEmployeeBtn: document.getElementById("addManagerEmployeeBtn"),
+  addMentorEmployeeBtn: document.getElementById("addMentorEmployeeBtn"),
   employeeSettingsBody: document.getElementById("employeeSettingsBody"),
   missingDetectedBody: document.getElementById("missingDetectedBody"),
   missingAppliedBody: document.getElementById("missingAppliedBody"),
@@ -272,7 +274,10 @@ function bindEvents() {
   });
 
   dom.employeeSettingsBody.addEventListener("input", handleEmployeeSettingChange);
+  dom.employeeSettingsBody.addEventListener("change", handleEmployeeSettingChange);
   dom.employeeSettingsBody.addEventListener("click", handleEmployeeSettingAction);
+  dom.addManagerEmployeeBtn.addEventListener("click", () => addManualEmployee("관리자"));
+  dom.addMentorEmployeeBtn.addEventListener("click", () => addManualEmployee("멘토"));
   dom.addMissingShiftBtn.addEventListener("click", addMissingShift);
   dom.missingDetectedBody.addEventListener("input", handleDetectedMissingInput);
   dom.missingDetectedBody.addEventListener("click", handleDetectedMissingAction);
@@ -796,10 +801,14 @@ function clearMissingShiftForm() {
 
 function handleEmployeeSettingChange(event) {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
+  if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
   const name = target.dataset.name;
   if (!name) return;
   const config = ensureEmployeeSetting(name);
+  if (target.classList.contains("employee-category-select")) {
+    updateEmployeeCategory(name, target.value);
+    return;
+  }
   if (target.classList.contains("rate-input")) {
     config.hourlyRate = Math.max(0, toNumber(target.value, state.settings.defaultHourlyWage));
   }
@@ -825,10 +834,56 @@ function handleEmployeeSettingAction(event) {
   if (!name) return;
 
   const beforeCount = state.entries.length;
+  const hadEmployeeSetting = Boolean(state.employeeSettings[name]);
+  const hadManagerProfile = Boolean(state.managerProfiles[name]);
   state.entries = state.entries.filter((entry) => entry.name !== name);
   delete state.employeeSettings[name];
   delete state.managerProfiles[name];
   state.scheduleExcludedManagers = state.scheduleExcludedManagers.filter((item) => item !== name);
+  clearManagerSchedulingReferences(name);
+
+  if (beforeCount === state.entries.length && !hadEmployeeSetting && !hadManagerProfile) {
+    setStatus("삭제할 근무자 데이터가 없습니다.", true);
+    renderEverything();
+    return;
+  }
+
+  setStatus(`${name} 근무자 데이터를 삭제했습니다.`);
+  renderEverything();
+}
+
+function updateEmployeeCategory(name, category) {
+  const nextCategory = normalizeEmployeeCategory(category);
+  const config = ensureEmployeeSetting(name);
+  const previousCategory = getEmployeeCategory(name);
+  if (nextCategory === normalizeEmployeeCategory(previousCategory)) return;
+
+  config.category = nextCategory;
+  if (!state.entries.some((entry) => entry.name === name)) {
+    config.manual = true;
+  }
+  state.entries.forEach((entry) => {
+    if (entry.name === name) {
+      entry.category = nextCategory;
+    }
+  });
+
+  if (isManagerCategory(nextCategory)) {
+    state.scheduleExcludedManagers = state.scheduleExcludedManagers.filter((item) => item !== name);
+    state.managerProfiles[name] = state.managerProfiles[name] || createDefaultManagerProfile();
+    syncCareerRatesToEmployeeSettings();
+  } else {
+    delete state.managerProfiles[name];
+    clearManagerSchedulingReferences(name);
+    state.scheduleExcludedManagers = normalizeNameList([...state.scheduleExcludedManagers, name]);
+  }
+
+  persistConfig();
+  renderEverything();
+  setStatus(`${name} 카테고리를 ${nextCategory}(으)로 변경했습니다.`);
+}
+
+function clearManagerSchedulingReferences(name) {
   state.scheduleFixedRules = state.scheduleFixedRules.filter((rule) => rule.manager !== name);
   Object.keys(state.scheduleAssignments).forEach((month) => {
     state.scheduleAssignments[month] = state.scheduleAssignments[month].map((row) => {
@@ -846,15 +901,38 @@ function handleEmployeeSettingAction(event) {
       return next;
     });
   });
+}
 
-  if (beforeCount === state.entries.length) {
-    setStatus("삭제할 근무자 데이터가 없습니다.", true);
-    renderEverything();
+function addManualEmployee(category) {
+  const cleanCategory = cleanText(category);
+  const promptMessage = `추가할 ${cleanCategory} 이름을 입력하세요.`;
+  const rawName = window.prompt(promptMessage);
+  const name = isManagerCategory(cleanCategory) ? stripManagerTitle(rawName) : cleanText(rawName);
+
+  if (!name) {
+    setStatus(promptMessage, true);
+    return;
+  }
+  if (getEmployees().includes(name)) {
+    setStatus("이미 등록된 근무자입니다.", true);
     return;
   }
 
-  setStatus(`${name} 근무자 데이터를 삭제했습니다.`);
-  renderEverything();
+  const config = ensureEmployeeSetting(name);
+  config.category = cleanCategory;
+  config.manual = true;
+
+  if (isManagerCategory(cleanCategory)) {
+    state.scheduleExcludedManagers = state.scheduleExcludedManagers.filter((item) => item !== name);
+    state.managerProfiles[name] = state.managerProfiles[name] || createDefaultManagerProfile();
+    syncCareerRatesToEmployeeSettings();
+  }
+
+  persistConfig();
+  renderEmployeeSettingsTable();
+  renderScheduleAi();
+  renderCareer();
+  setStatus(`${name} ${cleanCategory}를 추가했습니다.`);
 }
 
 function renderEverything() {
@@ -957,10 +1035,16 @@ function renderEmployeeSettingsTable() {
   dom.employeeSettingsBody.innerHTML = employees
     .map((name) => {
       const config = ensureEmployeeSetting(name);
-      const category = getMostUsedCategory(name);
+      const category = getEmployeeCategory(name);
+      const normalizedCategory = normalizeEmployeeCategory(category);
       return `<tr>
         <td>${escapeHtml(name)}</td>
-        <td>${escapeHtml(category || "-")}</td>
+        <td>
+          <select class="employee-category-select" data-name="${escapeHtml(name)}">
+            <option value="관리자" ${normalizedCategory === "관리자" ? "selected" : ""}>관리자</option>
+            <option value="멘토" ${normalizedCategory === "멘토" ? "selected" : ""}>멘토</option>
+          </select>
+        </td>
         <td>
           <input class="rate-input" data-name="${escapeHtml(name)}" type="number" min="0" step="10" value="${Math.round(
             config.hourlyRate
@@ -2951,9 +3035,18 @@ function createDefaultManagerProfile() {
 function getManagerNames() {
   const excluded = new Set(state.scheduleExcludedManagers || []);
   const names = new Set();
+  let hasExplicitCategoryData = false;
   state.entries.forEach((entry) => {
+    if (cleanText(entry.category)) {
+      hasExplicitCategoryData = true;
+    }
     if (isManagerCategory(entry.category) && !excluded.has(entry.name)) {
       names.add(entry.name);
+    }
+  });
+  Object.values(state.employeeSettings || {}).forEach((config) => {
+    if (config && typeof config === "object" && cleanText(config.category)) {
+      hasExplicitCategoryData = true;
     }
   });
   Object.keys(state.managerProfiles || {}).forEach((name) => {
@@ -2968,7 +3061,7 @@ function getManagerNames() {
       if (row.secondaryManager && !excluded.has(row.secondaryManager)) names.add(row.secondaryManager);
     });
   });
-  if (!names.size) {
+  if (!names.size && !hasExplicitCategoryData) {
     state.entries.forEach((entry) => {
       if (!excluded.has(entry.name)) names.add(entry.name);
     });
@@ -3443,7 +3536,8 @@ function computeEmployeeMonthPayroll(name, month) {
   if (config.useWeeklyHoliday) {
     weekMap.forEach((week) => {
       const threshold = Math.max(0, toNumber(state.settings.weeklyThresholdHours, 15));
-      if (week.hours >= threshold) {
+      const eligibilityHours = getWeeklyHolidayEligibilityHours(name, month, week.weekIndex, week.hours);
+      if (eligibilityHours >= threshold) {
         const weeklyHolidayHours = Math.min(8, Math.max(0, (week.hours / 40) * 8));
         week.weeklyHolidayPay = roundCurrency(weeklyHolidayHours * hourlyRate);
         week.totalPay += week.weeklyHolidayPay;
@@ -3498,6 +3592,25 @@ function computeEmployeeMonthPayroll(name, month) {
       netPay: roundCurrency(netPay),
     },
   };
+}
+
+function getWeeklyHolidayEligibilityHours(name, month, weekIndex, currentMonthWeekHours) {
+  const currentHours = Math.max(0, toNumber(currentMonthWeekHours, 0));
+  if (weekIndex !== 1) return currentHours;
+
+  const monthStart = parseDateOnly(`${month}-01`);
+  if (!monthStart) return currentHours;
+
+  const weekStart = addDays(monthStart, -monthStart.getDay());
+  if (formatDateKey(weekStart) === formatDateKey(monthStart)) return currentHours;
+
+  const monthStartKey = formatDateKey(monthStart);
+  const weekStartKey = formatDateKey(weekStart);
+  const previousMonthWeekHours = state.entries
+    .filter((entry) => entry.name === name && entry.workDate >= weekStartKey && entry.workDate < monthStartKey)
+    .reduce((sum, entry) => sum + Math.max(0, toNumber(entry.adjustedHours, 0)), 0);
+
+  return round2(currentHours + previousMonthWeekHours);
 }
 
 function computeShiftPayroll(entry, hourlyRate, config) {
@@ -3595,6 +3708,11 @@ function getAvailableMonths() {
 
 function getEmployees() {
   const names = new Set(state.entries.map((entry) => entry.name));
+  Object.entries(state.employeeSettings || {}).forEach(([name, config]) => {
+    if (config && typeof config === "object" && config.manual) {
+      names.add(name);
+    }
+  });
   Object.keys(state.managerProfiles || {}).forEach((name) => names.add(name));
   return Array.from(names).sort((a, b) => a.localeCompare(b, "ko-KR"));
 }
@@ -3608,6 +3726,21 @@ function getEmployeesInMonth(month) {
 
 function getMostUsedCategory(name) {
   return getMostUsedCategoryInMonth(name, "");
+}
+
+function getEmployeeCategory(name) {
+  const entryCategory = getMostUsedCategory(name);
+  if (entryCategory) return entryCategory;
+
+  const settingCategory = cleanText(state.employeeSettings[name]?.category);
+  if (settingCategory) return settingCategory;
+
+  if (state.managerProfiles[name]) return "관리자";
+  return "";
+}
+
+function normalizeEmployeeCategory(category) {
+  return isManagerCategory(category) ? "관리자" : "멘토";
 }
 
 function getMostUsedCategoryInMonth(name, month) {

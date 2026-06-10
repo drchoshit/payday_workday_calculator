@@ -152,6 +152,18 @@ body {
   font-size: 18px;
 }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.card-actions .btn {
+  white-space: nowrap;
+}
+
 .card-head.align-center {
   align-items: flex-end;
 }
@@ -967,6 +979,15 @@ select:focus {
   .inline-fields.triple .field,
   .inline-fields.quad .field {
     flex: 1 1 100%;
+  }
+
+  .card-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .card-actions {
+    width: 100%;
   }
 
   .btn {
