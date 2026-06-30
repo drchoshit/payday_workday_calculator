@@ -460,19 +460,19 @@ select:focus {
 }
 
 .manager-condition-list {
-  min-width: 1840px;
+  min-width: 1968px;
 }
 
 .manager-condition-matrix {
   border: 1px solid #d6e1f7;
   border-radius: 8px;
   background: #ffffff;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .manager-matrix-row {
   display: grid;
-  grid-template-columns: 132px 104px 92px 92px repeat(7, 126px) minmax(300px, 1fr) 74px;
+  grid-template-columns: 132px 104px 92px 92px repeat(7, 144px) minmax(300px, 1fr) 74px;
   border-bottom: 1px solid #dfe7f8;
 }
 
@@ -489,7 +489,7 @@ select:focus {
 
 .manager-matrix-cell {
   min-width: 0;
-  padding: 12px 10px;
+  padding: 9px 10px;
   border-right: 1px solid #dfe7f8;
   display: flex;
   align-items: center;
@@ -498,6 +498,19 @@ select:focus {
 
 .manager-matrix-cell:last-child {
   border-right: 0;
+}
+
+.manager-matrix-row > .manager-matrix-cell:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+  box-shadow: 8px 0 12px rgba(29, 61, 126, 0.06);
+}
+
+.manager-matrix-head > .manager-matrix-cell:first-child {
+  z-index: 4;
+  background: #edf3ff;
 }
 
 .manager-weekday-1,
@@ -541,7 +554,7 @@ select:focus {
 }
 
 .manager-day-cell {
-  padding: 14px 9px;
+  padding: 8px 9px;
 }
 
 .manager-unavailable-cell {
@@ -617,7 +630,7 @@ select:focus {
 }
 
 .availability-day.compact .shift-toggle span {
-  min-height: 32px;
+  min-height: 28px;
   border-radius: 7px;
   font-size: 12px;
 }
