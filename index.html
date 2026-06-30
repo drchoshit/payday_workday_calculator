@@ -511,7 +511,7 @@
                   <input id="scheduleMonthInput" type="month" />
                 </label>
                 <button id="generateScheduleBtn" class="btn primary" type="button">
-                  자동 배정 실행
+                  최대 자동배정
                 </button>
                 <button id="saveSchedulePageBtn" class="btn secondary" type="button">
                   저장
@@ -520,8 +520,26 @@
             </div>
             <div class="card-body">
               <p class="hint">
-                자동 배정은 우선순위, 희망 근무 T 수, 가능한 요일/타임, 고정 배정을 반영합니다. 실행 후 아래 표에서 세부 수정할 수 있습니다.
+                자동 배정은 빈 타임을 최소화하면서 우선순위, 근무 희망 T(1주 기준), 가능한 요일/타임, 근무 불가 기간, 고정 배정을 반영합니다.
               </p>
+              <div class="auto-schedule-actions">
+                <div class="auto-schedule-group">
+                  <span class="auto-schedule-label">요일 우선</span>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="1" type="button">월 우선</button>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="2" type="button">화 우선</button>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="3" type="button">수 우선</button>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="4" type="button">목 우선</button>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="5" type="button">금 우선</button>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="6" type="button">토 우선</button>
+                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="0" type="button">일 우선</button>
+                </div>
+                <div class="auto-schedule-group">
+                  <span class="auto-schedule-label">타임 우선</span>
+                  <button class="btn secondary small-btn auto-shift-priority-btn" data-shift-priority="1T" type="button">1T 우선</button>
+                  <button class="btn secondary small-btn auto-shift-priority-btn" data-shift-priority="2T" type="button">2T 우선</button>
+                  <button class="btn secondary small-btn auto-shift-priority-btn" data-shift-priority="3T" type="button">3T 우선</button>
+                </div>
+              </div>
             </div>
           </article>
 
@@ -587,7 +605,7 @@
                     고정 규칙 추가
                   </button>
                 </div>
-                <div class="scroll-x">
+                <div class="scroll-x fixed-rule-table-wrap">
                   <table class="table compact">
                     <thead>
                       <tr>
@@ -612,6 +630,32 @@
 
           <article class="card">
             <div class="card-head">
+              <h2>월간 인원 설정 캘린더</h2>
+            </div>
+            <div class="card-body scroll-x">
+              <table class="schedule-headcount-calendar-table">
+                <thead id="scheduleHeadcountCalendarHead">
+                  <tr>
+                    <th>월</th>
+                    <th>화</th>
+                    <th>수</th>
+                    <th>목</th>
+                    <th>금</th>
+                    <th>토</th>
+                    <th>일</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleHeadcountCalendarBody">
+                  <tr>
+                    <td colspan="7" class="empty">인원 설정 데이터가 없습니다.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
               <h2>관리자별 배정 조건</h2>
               <div class="inline-fields">
                 <label class="field compact-field">
@@ -628,31 +672,9 @@
               </div>
             </div>
             <div class="card-body scroll-x">
-              <table class="table compact schedule-manager-table">
-                <thead>
-                  <tr>
-                    <th>이름</th>
-                    <th>시급</th>
-                    <th>희망 T 수</th>
-                    <th>우선순위</th>
-                    <th>1타임 P</th>
-                    <th>월 가능</th>
-                    <th>화 가능</th>
-                    <th>수 가능</th>
-                    <th>목 가능</th>
-                    <th>금 가능</th>
-                    <th>토 가능</th>
-                    <th>일 가능</th>
-                    <th>행 삭제</th>
-                  </tr>
-                </thead>
-                <tbody id="scheduleManagerBody">
-                  <tr>
-                    <td colspan="13" class="empty">근무자 데이터가 없습니다.</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p class="hint">각 요일 셀에서 `1T/2T/3T`를 체크해 가능한 타임을 입력하세요.</p>
+              <div id="scheduleManagerBody" class="manager-condition-list">
+                <div class="empty">관리자 데이터가 없습니다.</div>
+              </div>
             </div>
           </article>
 
@@ -729,32 +751,6 @@
                 </label>
                 <button id="saveSelectedSlotBtn" class="btn primary" type="button">선택 타임 저장</button>
               </div>
-            </div>
-          </article>
-
-          <article class="card">
-            <div class="card-head">
-              <h2>월간 인원 설정 캘린더</h2>
-            </div>
-            <div class="card-body scroll-x">
-              <table class="schedule-headcount-calendar-table">
-                <thead id="scheduleHeadcountCalendarHead">
-                  <tr>
-                    <th>월</th>
-                    <th>화</th>
-                    <th>수</th>
-                    <th>목</th>
-                    <th>금</th>
-                    <th>토</th>
-                    <th>일</th>
-                  </tr>
-                </thead>
-                <tbody id="scheduleHeadcountCalendarBody">
-                  <tr>
-                    <td colspan="7" class="empty">인원 설정 데이터가 없습니다.</td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </article>
 
