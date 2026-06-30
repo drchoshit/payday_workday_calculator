@@ -2059,7 +2059,11 @@ function renderScheduleManagerTable() {
     "근무 불가 기간",
     "관리",
   ]
-    .map((label) => `<div class="manager-matrix-cell manager-matrix-head-cell">${label}</div>`)
+    .map((label, index) => {
+      const weekday = index >= 4 && index <= 10 ? WEEKDAY_ORDER[index - 4] : null;
+      const dayClass = weekday !== null ? ` manager-weekday-${weekday}` : "";
+      return `<div class="manager-matrix-cell manager-matrix-head-cell${dayClass}">${label}</div>`;
+    })
     .join("");
 
   const bodyRows = managers
@@ -2076,7 +2080,7 @@ function buildManagerConditionMatrixRow(name) {
   const profile = ensureManagerProfile(name);
   const employee = ensureEmployeeSetting(name);
   const dayCells = WEEKDAY_ORDER.map(
-    (weekday) => `<div class="manager-matrix-cell manager-day-cell">
+    (weekday) => `<div class="manager-matrix-cell manager-day-cell manager-weekday-${weekday}">
       ${buildAvailabilityDay(name, profile, weekday, false)}
     </div>`
   ).join("");

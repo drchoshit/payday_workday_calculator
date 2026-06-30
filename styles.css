@@ -489,7 +489,7 @@ select:focus {
 
 .manager-matrix-cell {
   min-width: 0;
-  padding: 8px;
+  padding: 12px 10px;
   border-right: 1px solid #dfe7f8;
   display: flex;
   align-items: center;
@@ -498,6 +498,20 @@ select:focus {
 
 .manager-matrix-cell:last-child {
   border-right: 0;
+}
+
+.manager-weekday-1,
+.manager-weekday-3,
+.manager-weekday-5,
+.manager-weekday-0 {
+  background: #f8fbff;
+}
+
+.manager-matrix-head .manager-weekday-1,
+.manager-matrix-head .manager-weekday-3,
+.manager-matrix-head .manager-weekday-5,
+.manager-matrix-head .manager-weekday-0 {
+  background: #eaf2ff;
 }
 
 .manager-name-cell {
@@ -527,7 +541,7 @@ select:focus {
 }
 
 .manager-day-cell {
-  padding: 7px 5px;
+  padding: 14px 9px;
 }
 
 .manager-unavailable-cell {
@@ -575,7 +589,7 @@ select:focus {
 
 .availability-day.compact .availability-shift-options {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
+  gap: 7px;
 }
 
 .shift-toggle {
@@ -603,7 +617,7 @@ select:focus {
 }
 
 .availability-day.compact .shift-toggle span {
-  min-height: 30px;
+  min-height: 32px;
   border-radius: 7px;
   font-size: 12px;
 }
