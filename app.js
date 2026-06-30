@@ -2052,7 +2052,7 @@ function renderScheduleManagerTable() {
 
   const headCells = [
     "관리자",
-    "희망 T",
+    "최대 주당 T",
     "우선순위",
     "1타임 P",
     ...WEEKDAY_ORDER.map((weekday) => WEEKDAYS[weekday]),
@@ -2089,7 +2089,7 @@ function buildManagerConditionMatrixRow(name) {
     <div class="manager-matrix-cell">
       <input class="schedule-manager-desired" aria-label="${escapeHtml(
         formatManagerDisplayName(name)
-      )} 근무 희망 T" data-name="${escapeHtml(
+      )} 최대 주당 T" data-name="${escapeHtml(
         name
       )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
     </div>

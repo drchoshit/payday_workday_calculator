@@ -460,7 +460,7 @@ select:focus {
 }
 
 .manager-condition-list {
-  min-width: 1480px;
+  min-width: 1840px;
 }
 
 .manager-condition-matrix {
@@ -472,7 +472,7 @@ select:focus {
 
 .manager-matrix-row {
   display: grid;
-  grid-template-columns: 132px 92px 92px 92px repeat(7, 78px) minmax(300px, 1fr) 74px;
+  grid-template-columns: 132px 104px 92px 92px repeat(7, 126px) minmax(300px, 1fr) 74px;
   border-bottom: 1px solid #dfe7f8;
 }
 
@@ -574,6 +574,7 @@ select:focus {
 }
 
 .availability-day.compact .availability-shift-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 5px;
 }
 
@@ -602,7 +603,7 @@ select:focus {
 }
 
 .availability-day.compact .shift-toggle span {
-  min-height: 28px;
+  min-height: 30px;
   border-radius: 7px;
   font-size: 12px;
 }
