@@ -636,8 +636,17 @@ select:focus {
 
 .manager-row-availability {
   display: grid;
-  grid-template-columns: repeat(7, 110px);
+  grid-template-columns: repeat(7, 210px);
   gap: 8px;
+}
+
+.manager-row-availability .availability-shift-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.manager-row-availability .shift-toggle span {
+  min-height: 34px;
 }
 
 .manager-unavailable-group {
