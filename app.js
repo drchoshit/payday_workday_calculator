@@ -162,6 +162,7 @@ const dom = {
   allAvailabilityOffBtn: document.getElementById("allAvailabilityOffBtn"),
   shift3AvailabilityOnBtn: document.getElementById("shift3AvailabilityOnBtn"),
   shift3AvailabilityOffBtn: document.getElementById("shift3AvailabilityOffBtn"),
+  fixedPreferenceManagerBody: document.getElementById("fixedPreferenceManagerBody"),
   scheduleManagerBody: document.getElementById("scheduleManagerBody"),
   scheduleCalendarHead: document.getElementById("scheduleCalendarHead"),
   scheduleCalendarBody: document.getElementById("scheduleCalendarBody"),
@@ -315,6 +316,8 @@ function bindEvents() {
   dom.allAvailabilityOffBtn.addEventListener("click", () => setAllAvailability(false));
   dom.shift3AvailabilityOnBtn.addEventListener("click", () => setShiftAvailabilityForAll("3T", true));
   dom.shift3AvailabilityOffBtn.addEventListener("click", () => setShiftAvailabilityForAll("3T", false));
+  dom.fixedPreferenceManagerBody.addEventListener("input", handleScheduleManagerInput);
+  dom.fixedPreferenceManagerBody.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("input", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("click", handleScheduleManagerAction);
@@ -1782,6 +1785,7 @@ function renderScheduleAi() {
   renderShiftTemplateTable();
   renderFixedRuleSelectors();
   renderFixedRuleTable();
+  renderFixedPreferenceManagerCards();
   renderScheduleManagerTable();
   renderScheduleResultTable();
   renderScheduleHeadcountCalendarTable();
@@ -2045,6 +2049,27 @@ function renderScheduleManagerTable() {
   dom.scheduleManagerBody.innerHTML = managers.map((name) => buildManagerConditionMatrixRow(name)).join("");
 }
 
+function renderFixedPreferenceManagerCards() {
+  const managers = getManagerNames();
+  if (!managers.length) {
+    dom.fixedPreferenceManagerBody.innerHTML = '<div class="empty">관리자 데이터가 없습니다.</div>';
+    return;
+  }
+
+  dom.fixedPreferenceManagerBody.innerHTML = managers
+    .map((name) => {
+      const profile = ensureManagerProfile(name);
+      return `<section class="fixed-preference-manager-card">
+        <div class="fixed-preference-manager-head">
+          <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
+          <span>주간 고정 희망</span>
+        </div>
+        ${buildFixedPreferenceEditor(name, profile)}
+      </section>`;
+    })
+    .join("");
+}
+
 function buildManagerConditionMatrixRow(name) {
   const profile = ensureManagerProfile(name);
   const employee = ensureEmployeeSetting(name);
@@ -2087,10 +2112,6 @@ function buildManagerConditionMatrixRow(name) {
               )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
             </label>
           </div>
-        </div>
-        <div class="manager-setting-group manager-fixed-preference-group">
-          <div class="manager-setting-title">고정근무 희망</div>
-          ${buildFixedPreferenceEditor(name, profile)}
         </div>
         <div class="manager-setting-group manager-availability-group">
           <div class="manager-setting-title">근무 가능한 요일 · 타임</div>
@@ -2240,7 +2261,7 @@ function handleScheduleManagerInput(event) {
       if (event.type === "change") {
         if (range.max < range.min) range.max = range.min;
         target.value = String(target.classList.contains("schedule-fixed-preference-min") ? range.min : range.max);
-        renderScheduleManagerTable();
+        renderFixedPreferenceManagerCards();
       }
     }
   }
