@@ -2042,79 +2042,73 @@ function renderScheduleManagerTable() {
     return;
   }
 
-  const headCells = [
-    "관리자",
-    "최대 주당 T",
-    "고정근무 희망",
-    "우선순위",
-    "1타임 P",
-    ...WEEKDAY_ORDER.map((weekday) => WEEKDAYS[weekday]),
-    "근무 불가 기간",
-    "관리",
-  ]
-    .map((label, index) => {
-      const weekday = index >= 5 && index <= 11 ? WEEKDAY_ORDER[index - 5] : null;
-      const dayClass = weekday !== null ? ` manager-weekday-${weekday}` : "";
-      return `<div class="manager-matrix-cell manager-matrix-head-cell${dayClass}">${label}</div>`;
-    })
-    .join("");
-
-  const bodyRows = managers
-    .map((name) => buildManagerConditionMatrixRow(name))
-    .join("");
-
-  dom.scheduleManagerBody.innerHTML = `<div class="manager-condition-matrix">
-    <div class="manager-matrix-row manager-matrix-head">${headCells}</div>
-    ${bodyRows}
-  </div>`;
+  dom.scheduleManagerBody.innerHTML = managers.map((name) => buildManagerConditionMatrixRow(name)).join("");
 }
 
 function buildManagerConditionMatrixRow(name) {
   const profile = ensureManagerProfile(name);
   const employee = ensureEmployeeSetting(name);
-  const dayCells = WEEKDAY_ORDER.map(
-    (weekday) => `<div class="manager-matrix-cell manager-day-cell manager-weekday-${weekday}">
-      ${buildAvailabilityDay(name, profile, weekday, false)}
-    </div>`
-  ).join("");
+  const availabilityDays = WEEKDAY_ORDER.map((weekday) => buildAvailabilityDay(name, profile, weekday, true)).join("");
+  const displayName = formatManagerDisplayName(name);
 
-  return `<div class="manager-matrix-row">
-    <div class="manager-matrix-cell manager-name-cell">
+  return `<section class="manager-row-card">
+    <div class="manager-row-identity">
       <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
       <span>시급 ${formatWon(employee.hourlyRate)}</span>
+      <small>오른쪽으로 스크롤 →</small>
     </div>
-    <div class="manager-matrix-cell">
-      <input class="schedule-manager-desired" aria-label="${escapeHtml(
-        formatManagerDisplayName(name)
-      )} 최대 주당 T" data-name="${escapeHtml(
-        name
-      )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
+    <div class="manager-row-scroll" tabindex="0" aria-label="${escapeHtml(displayName)} 배정 조건 가로 스크롤">
+      <div class="manager-row-track">
+        <div class="manager-setting-group manager-basic-group">
+          <div class="manager-setting-title">기본 배정</div>
+          <div class="manager-basic-fields">
+            <label class="field">
+              <span>최대 주당 T</span>
+              <input class="schedule-manager-desired" aria-label="${escapeHtml(
+                displayName
+              )} 최대 주당 T" data-name="${escapeHtml(
+                name
+              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
+            </label>
+            <label class="field">
+              <span>우선순위</span>
+              <input class="schedule-manager-priority" aria-label="${escapeHtml(
+                displayName
+              )} 우선순위" data-name="${escapeHtml(
+                name
+              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}" />
+            </label>
+            <label class="field">
+              <span>1타임 P</span>
+              <input class="schedule-manager-point" aria-label="${escapeHtml(
+                displayName
+              )} 1타임 P" data-name="${escapeHtml(
+                name
+              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
+            </label>
+          </div>
+        </div>
+        <div class="manager-setting-group manager-fixed-preference-group">
+          <div class="manager-setting-title">고정근무 희망</div>
+          ${buildFixedPreferenceEditor(name, profile)}
+        </div>
+        <div class="manager-setting-group manager-availability-group">
+          <div class="manager-setting-title">근무 가능한 요일 · 타임</div>
+          <div class="manager-row-availability">${availabilityDays}</div>
+        </div>
+        <div class="manager-setting-group manager-unavailable-group">
+          <div class="manager-setting-title">근무 불가 기간</div>
+          ${buildUnavailableRangesCell(name, profile)}
+        </div>
+        <div class="manager-setting-group manager-action-group">
+          <div class="manager-setting-title">관리</div>
+          <button class="btn secondary small-btn delete-manager-row-btn" data-name="${escapeHtml(
+            name
+          )}" type="button">근무자 삭제</button>
+        </div>
+      </div>
     </div>
-    <div class="manager-matrix-cell manager-fixed-preference-cell">
-      ${buildFixedPreferenceEditor(name, profile)}
-    </div>
-    <div class="manager-matrix-cell">
-      <input class="schedule-manager-priority" aria-label="${escapeHtml(
-        formatManagerDisplayName(name)
-      )} 우선순위" data-name="${escapeHtml(
-        name
-      )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}" />
-    </div>
-    <div class="manager-matrix-cell">
-      <input class="schedule-manager-point" aria-label="${escapeHtml(
-        formatManagerDisplayName(name)
-      )} 1타임 P" data-name="${escapeHtml(
-        name
-      )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
-    </div>
-    ${dayCells}
-    <div class="manager-matrix-cell manager-unavailable-cell">${buildUnavailableRangesCell(name, profile)}</div>
-    <div class="manager-matrix-cell manager-action-cell">
-      <button class="btn secondary small-btn delete-manager-row-btn" data-name="${escapeHtml(
-        name
-      )}" type="button">삭제</button>
-    </div>
-  </div>`;
+  </section>`;
 }
 
 function buildFixedPreferenceEditor(name, profile) {
