@@ -510,9 +510,6 @@
                   <span>배정 월</span>
                   <input id="scheduleMonthInput" type="month" />
                 </label>
-                <button id="generateScheduleBtn" class="btn primary" type="button">
-                  최대 자동배정
-                </button>
                 <button id="saveSchedulePageBtn" class="btn secondary" type="button">
                   저장
                 </button>
@@ -520,25 +517,19 @@
             </div>
             <div class="card-body">
               <p class="hint">
-                자동 배정은 빈 타임을 최소화하면서 우선순위, 최대 주당 T, 가능한 요일/타임, 근무 불가 기간, 고정 배정을 반영합니다.
+                모든 자동 배정은 하루 1인 1타임 원칙과 최대 주당 T, 가능한 요일/타임, 근무 불가 기간, 고정 배정 및 고정근무 희망을 반영합니다.
               </p>
               <div class="auto-schedule-actions">
                 <div class="auto-schedule-group">
-                  <span class="auto-schedule-label">요일 우선</span>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="1" type="button">월 우선</button>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="2" type="button">화 우선</button>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="3" type="button">수 우선</button>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="4" type="button">목 우선</button>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="5" type="button">금 우선</button>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="6" type="button">토 우선</button>
-                  <button class="btn secondary small-btn auto-weekday-priority-btn" data-weekday-priority="0" type="button">일 우선</button>
+                  <span class="auto-schedule-label">배정 방식</span>
+                  <button id="generateScheduleBtn" class="btn primary auto-mode-btn" data-auto-mode="balanced" type="button">골고루 배정</button>
+                  <button class="btn secondary auto-mode-btn" data-auto-mode="maximum" type="button">최대 배정</button>
+                  <button class="btn secondary auto-mode-btn" data-auto-mode="fixed" type="button">고정근무 우선</button>
+                  <button class="btn secondary auto-mode-btn" data-auto-mode="random" type="button">새 조합 보기</button>
                 </div>
-                <div class="auto-schedule-group">
-                  <span class="auto-schedule-label">타임 우선</span>
-                  <button class="btn secondary small-btn auto-shift-priority-btn" data-shift-priority="1T" type="button">1T 우선</button>
-                  <button class="btn secondary small-btn auto-shift-priority-btn" data-shift-priority="2T" type="button">2T 우선</button>
-                  <button class="btn secondary small-btn auto-shift-priority-btn" data-shift-priority="3T" type="button">3T 우선</button>
-                </div>
+                <p class="hint auto-mode-help">
+                  골고루 배정은 근무 횟수를 균등하게, 최대 배정은 우선순위와 남은 한도가 큰 근무자부터, 고정근무 우선은 입력한 주간 희망을 먼저 채웁니다. 새 조합 보기는 같은 조건 안에서 다른 조합을 만듭니다.
+                </p>
               </div>
             </div>
           </article>
@@ -672,6 +663,9 @@
               </div>
             </div>
             <div class="card-body scroll-x">
+              <p class="hint manager-fixed-help">
+                고정근무 희망을 켜고 희망 요일과 타임별 주당 최소~최대 횟수를 입력하세요. 예: 월·화·목·금 선택, 1T 1~2회, 2T 2~2회. 0~0인 타임은 배정하지 않습니다.
+              </p>
               <div id="scheduleManagerBody" class="manager-condition-list">
                 <div class="empty">관리자 데이터가 없습니다.</div>
               </div>

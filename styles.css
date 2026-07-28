@@ -192,6 +192,10 @@ body {
   font-weight: 800;
 }
 
+.auto-mode-help {
+  margin: 0;
+}
+
 .field {
   display: flex;
   flex-direction: column;
@@ -460,7 +464,7 @@ select:focus {
 }
 
 .manager-condition-list {
-  min-width: 1968px;
+  min-width: 2320px;
 }
 
 .manager-condition-matrix {
@@ -472,7 +476,7 @@ select:focus {
 
 .manager-matrix-row {
   display: grid;
-  grid-template-columns: 132px 104px 92px 92px repeat(7, 144px) minmax(300px, 1fr) 74px;
+  grid-template-columns: 132px 104px 340px 92px 92px repeat(7, 144px) minmax(300px, 1fr) 74px;
   border-bottom: 1px solid #dfe7f8;
 }
 
@@ -551,6 +555,91 @@ select:focus {
   min-width: 0;
   padding: 8px 9px;
   font-size: 13px;
+}
+
+.manager-fixed-help {
+  margin: 0 0 12px;
+}
+
+.manager-fixed-preference-cell {
+  align-items: stretch;
+  padding: 8px;
+}
+
+.fixed-preference-editor {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+}
+
+.fixed-preference-enable {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #24427e;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.fixed-preference-enable input,
+.fixed-day-toggle input {
+  width: auto;
+  margin: 0;
+}
+
+.fixed-preference-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.fixed-day-toggle {
+  cursor: pointer;
+}
+
+.fixed-day-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fixed-day-toggle span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 25px;
+  border: 1px solid #c8d7f7;
+  border-radius: 6px;
+  background: #fff;
+  color: #31528f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fixed-day-toggle input:checked + span {
+  border-color: #7c3aed;
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.fixed-preference-ranges {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.fixed-shift-range {
+  display: grid;
+  grid-template-columns: auto minmax(34px, 1fr) auto minmax(34px, 1fr) auto;
+  align-items: center;
+  gap: 3px;
+  color: var(--ink-700);
+  font-size: 11px;
+}
+
+.fixed-shift-range input[type="number"] {
+  padding: 5px 3px;
+  text-align: center;
 }
 
 .manager-day-cell {
