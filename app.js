@@ -2073,14 +2073,22 @@ function renderFixedPreferenceManagerCards() {
 function buildManagerConditionMatrixRow(name) {
   const profile = ensureManagerProfile(name);
   const employee = ensureEmployeeSetting(name);
-  const availabilityDays = WEEKDAY_ORDER.map((weekday) => buildAvailabilityDay(name, profile, weekday, true)).join("");
+  const fixedOnly = Boolean(profile.fixedPreference.enabled);
+  const disabledAttr = fixedOnly ? " disabled" : "";
+  const availabilityDays = WEEKDAY_ORDER.map((weekday) =>
+    buildAvailabilityDay(name, profile, weekday, true, fixedOnly)
+  ).join("");
   const displayName = formatManagerDisplayName(name);
 
-  return `<section class="manager-row-card">
+  return `<section class="manager-row-card${fixedOnly ? " manager-row-locked" : ""}">
     <div class="manager-row-identity">
       <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
       <span>시급 ${formatWon(employee.hourlyRate)}</span>
-      <small>아래 파란 막대로 좌우 이동</small>
+      ${
+        fixedOnly
+          ? '<em class="manager-fixed-lock-badge">고정근무 사용 중</em><small>일반 배정 조건 잠금</small>'
+          : "<small>아래 파란 막대로 좌우 이동</small>"
+      }
     </div>
     <div class="manager-row-scroll" tabindex="0" aria-label="${escapeHtml(displayName)} 배정 조건 가로 스크롤">
       <div class="manager-row-track">
@@ -2093,7 +2101,7 @@ function buildManagerConditionMatrixRow(name) {
                 displayName
               )} 최대 주당 T" data-name="${escapeHtml(
                 name
-              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
+              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}"${disabledAttr} />
             </label>
             <label class="field">
               <span>우선순위</span>
@@ -2101,7 +2109,7 @@ function buildManagerConditionMatrixRow(name) {
                 displayName
               )} 우선순위" data-name="${escapeHtml(
                 name
-              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}" />
+              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}"${disabledAttr} />
             </label>
             <label class="field">
               <span>1타임 P</span>
@@ -2109,7 +2117,7 @@ function buildManagerConditionMatrixRow(name) {
                 displayName
               )} 1타임 P" data-name="${escapeHtml(
                 name
-              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
+              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}"${disabledAttr} />
             </label>
           </div>
         </div>
@@ -2119,7 +2127,7 @@ function buildManagerConditionMatrixRow(name) {
         </div>
         <div class="manager-setting-group manager-unavailable-group">
           <div class="manager-setting-title"><b>3</b> 근무 불가 기간</div>
-          ${buildUnavailableRangesCell(name, profile)}
+          ${buildUnavailableRangesCell(name, profile, fixedOnly)}
         </div>
         <div class="manager-setting-group manager-action-group">
           <div class="manager-setting-title"><b>4</b> 관리</div>
@@ -2174,7 +2182,7 @@ function buildAvailabilityGrid(name, profile) {
   ).join("")}</div>`;
 }
 
-function buildAvailabilityDay(name, profile, weekday, showLabel = true) {
+function buildAvailabilityDay(name, profile, weekday, showLabel = true, disabled = false) {
   const shiftHtml = SHIFT_IDS.map((shiftId) => {
     const checked = Boolean(profile.availability?.[weekday]?.[shiftId]);
     return `<label class="shift-toggle${checked ? " checked" : ""}">
@@ -2182,7 +2190,7 @@ function buildAvailabilityDay(name, profile, weekday, showLabel = true) {
         name
       )}" data-day="${weekday}" data-shift-id="${shiftId}" type="checkbox" ${
         checked ? "checked" : ""
-      } />
+      }${disabled ? " disabled" : ""} />
       <span>${shiftId}</span>
     </label>`;
   }).join("");
@@ -2193,7 +2201,8 @@ function buildAvailabilityDay(name, profile, weekday, showLabel = true) {
   </div>`;
 }
 
-function buildUnavailableRangesCell(name, profile) {
+function buildUnavailableRangesCell(name, profile, disabled = false) {
+  const disabledAttr = disabled ? " disabled" : "";
   const ranges = normalizeUnavailableRanges(profile.unavailableRanges);
   profile.unavailableRanges = ranges;
   const rangesHtml = ranges.length
@@ -2204,17 +2213,17 @@ function buildUnavailableRangesCell(name, profile) {
               <span>시작</span>
               <input class="schedule-manager-unavailable-start" data-name="${escapeHtml(
                 name
-              )}" data-range-index="${index}" type="date" value="${escapeHtml(range.start)}" />
+              )}" data-range-index="${index}" type="date" value="${escapeHtml(range.start)}"${disabledAttr} />
             </label>
             <label class="field">
               <span>종료</span>
               <input class="schedule-manager-unavailable-end" data-name="${escapeHtml(
                 name
-              )}" data-range-index="${index}" type="date" value="${escapeHtml(range.end)}" />
+              )}" data-range-index="${index}" type="date" value="${escapeHtml(range.end)}"${disabledAttr} />
             </label>
             <button class="btn secondary small-btn delete-unavailable-range-btn" data-name="${escapeHtml(
               name
-            )}" data-range-index="${index}" type="button">삭제</button>
+            )}" data-range-index="${index}" type="button"${disabledAttr}>삭제</button>
           </div>`
         )
         .join("")
@@ -2224,7 +2233,7 @@ function buildUnavailableRangesCell(name, profile) {
     <div class="unavailable-range-list">${rangesHtml}</div>
     <button class="btn secondary add-unavailable-range-btn" data-name="${escapeHtml(
       name
-    )}" type="button">불가 기간 추가</button>
+    )}" type="button"${disabledAttr}>불가 기간 추가</button>
   </div>`;
 }
 
@@ -2240,6 +2249,9 @@ function handleScheduleManagerInput(event) {
   }
   if (target.classList.contains("schedule-fixed-preference-enabled")) {
     profile.fixedPreference.enabled = target.checked;
+    if (event.type === "change") {
+      renderScheduleManagerTable();
+    }
   }
   if (target.classList.contains("schedule-fixed-preference-day")) {
     const weekday = Math.max(0, Math.min(6, Math.round(toNumber(target.dataset.day, 0))));
@@ -2363,6 +2375,7 @@ function addManagerRow() {
 function setAllAvailability(checked) {
   getManagerNames().forEach((name) => {
     const profile = ensureManagerProfile(name);
+    if (profile.fixedPreference.enabled) return;
     for (let day = 0; day < 7; day += 1) {
       ensureManagerProfileAvailability(profile, day);
       SHIFT_IDS.forEach((shiftId) => {
@@ -2378,6 +2391,7 @@ function setShiftAvailabilityForAll(shiftId, checked) {
   if (!SHIFT_IDS.includes(shiftId)) return;
   getManagerNames().forEach((name) => {
     const profile = ensureManagerProfile(name);
+    if (profile.fixedPreference.enabled) return;
     for (let day = 0; day < 7; day += 1) {
       ensureManagerProfileAvailability(profile, day);
       profile.availability[day][shiftId] = checked;
@@ -2545,6 +2559,7 @@ function buildAutoScheduleForMonth(month, managers, options = {}) {
     const fixedManager =
       fixedRule?.manager &&
       isManagerAvailable(fixedRule.manager, dateKey, weekday, template.id) &&
+      isWithinAutoScheduleLimits(fixedRule.manager, dateKey, weekday, template.id, assignmentMap) &&
       !isManagerAssignedOnDate(assignmentMap, fixedRule.manager, dateKey)
         ? fixedRule.manager
         : "";
@@ -2763,8 +2778,10 @@ function pickAutoManager(
     const assignedB = toNumber(assignmentMap.get(b)?.shiftUnits, 0);
     const assignedWeekA = getWeeklyAssignmentUnits(assignmentMap, a, weekKey);
     const assignedWeekB = getWeeklyAssignmentUnits(assignmentMap, b, weekKey);
-    const desiredA = toNumber(profileA.desiredShifts, 0);
-    const desiredB = toNumber(profileB.desiredShifts, 0);
+    const fixedOnlyA = Boolean(profileA.fixedPreference.enabled);
+    const fixedOnlyB = Boolean(profileB.fixedPreference.enabled);
+    const desiredA = fixedOnlyA ? 0 : toNumber(profileA.desiredShifts, 0);
+    const desiredB = fixedOnlyB ? 0 : toNumber(profileB.desiredShifts, 0);
     const remainA = desiredA > 0 ? desiredA - assignedWeekA : 0;
     const remainB = desiredB > 0 ? desiredB - assignedWeekB : 0;
     const fixedRemainA = getFixedPreferenceRemainingMinimum(
@@ -2786,8 +2803,8 @@ function pickAutoManager(
 
     if (fixedRemainA !== fixedRemainB) return fixedRemainB - fixedRemainA;
 
-    const priorityA = toNumber(profileA.priority, 999);
-    const priorityB = toNumber(profileB.priority, 999);
+    const priorityA = fixedOnlyA ? 999 : toNumber(profileA.priority, 999);
+    const priorityB = fixedOnlyB ? 999 : toNumber(profileB.priority, 999);
     if (mode === "maximum") {
       const capacityA = desiredA > 0 ? remainA : 999;
       const capacityB = desiredB > 0 ? remainB : 999;
@@ -2822,20 +2839,28 @@ function getFixedPreferenceRemainingMinimum(profile, assignmentMap, name, weekKe
 function isWithinAutoScheduleLimits(name, dateKey, weekday, shiftId, assignmentMap) {
   const profile = ensureManagerProfile(name);
   const weekKey = getScheduleWeekKey(dateKey);
+  const preference = profile.fixedPreference;
+  if (preference.enabled) {
+    if (!preference.weekdays.includes(weekday)) return false;
+    const range = preference.shifts?.[shiftId];
+    if (!range || toNumber(range.max, 0) <= 0) return false;
+    return getWeeklyShiftAssignmentUnits(assignmentMap, name, weekKey, shiftId) < toNumber(range.max, 0);
+  }
+
   const weeklyAssigned = getWeeklyAssignmentUnits(assignmentMap, name, weekKey);
   const weeklyMaximum = toNumber(profile.desiredShifts, 0);
-  if (weeklyMaximum > 0 && weeklyAssigned >= weeklyMaximum) return false;
-
-  const preference = profile.fixedPreference;
-  if (!preference.enabled) return true;
-  if (!preference.weekdays.includes(weekday)) return false;
-  const range = preference.shifts?.[shiftId];
-  if (!range || toNumber(range.max, 0) <= 0) return false;
-  return getWeeklyShiftAssignmentUnits(assignmentMap, name, weekKey, shiftId) < toNumber(range.max, 0);
+  return weeklyMaximum <= 0 || weeklyAssigned < weeklyMaximum;
 }
 
 function isManagerAvailable(name, dateKey, weekday, shiftId) {
   const profile = ensureManagerProfile(name);
+  const preference = profile.fixedPreference;
+  if (preference.enabled) {
+    return (
+      preference.weekdays.includes(weekday) &&
+      toNumber(preference.shifts?.[shiftId]?.max, 0) > 0
+    );
+  }
   ensureManagerProfileAvailability(profile, weekday);
   return Boolean(profile.availability?.[weekday]?.[shiftId]) && !isDateInUnavailableRanges(dateKey, profile.unavailableRanges);
 }
