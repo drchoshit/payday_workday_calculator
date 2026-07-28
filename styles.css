@@ -469,6 +469,52 @@ select:focus {
   gap: 12px;
 }
 
+.manager-condition-guide {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d7e2f7;
+  border-radius: 10px;
+  background: #f7f9fe;
+  color: #39578f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.manager-condition-guide span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.manager-condition-guide b,
+.manager-setting-title b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #2f6bed;
+  color: #ffffff;
+  font-size: 11px;
+}
+
+.manager-condition-guide i {
+  color: #91a5ce;
+  font-style: normal;
+}
+
+.manager-condition-guide small {
+  margin-left: auto;
+  color: #667da9;
+  font-weight: 600;
+}
+
 .manager-row-card {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
@@ -558,6 +604,8 @@ select:focus {
 
 .manager-setting-group {
   flex: 0 0 auto;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 12px;
   border-right: 1px solid #dfe7f8;
   background: #ffffff;
@@ -568,6 +616,9 @@ select:focus {
 }
 
 .manager-setting-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-bottom: 10px;
   color: #284680;
   font-size: 12px;
@@ -631,12 +682,13 @@ select:focus {
 }
 
 .manager-availability-group {
-  width: 850px;
+  width: max-content;
 }
 
 .manager-row-availability {
   display: grid;
-  grid-template-columns: repeat(7, 210px);
+  width: max-content;
+  grid-template-columns: repeat(7, 190px);
   gap: 8px;
 }
 

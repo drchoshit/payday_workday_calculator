@@ -2080,12 +2080,12 @@ function buildManagerConditionMatrixRow(name) {
     <div class="manager-row-identity">
       <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
       <span>시급 ${formatWon(employee.hourlyRate)}</span>
-      <small>오른쪽으로 스크롤 →</small>
+      <small>아래 파란 막대로 좌우 이동</small>
     </div>
     <div class="manager-row-scroll" tabindex="0" aria-label="${escapeHtml(displayName)} 배정 조건 가로 스크롤">
       <div class="manager-row-track">
         <div class="manager-setting-group manager-basic-group">
-          <div class="manager-setting-title">기본 배정</div>
+          <div class="manager-setting-title"><b>1</b> 기본 배정</div>
           <div class="manager-basic-fields">
             <label class="field">
               <span>최대 주당 T</span>
@@ -2114,15 +2114,15 @@ function buildManagerConditionMatrixRow(name) {
           </div>
         </div>
         <div class="manager-setting-group manager-availability-group">
-          <div class="manager-setting-title">근무 가능한 요일 · 타임</div>
+          <div class="manager-setting-title"><b>2</b> 근무 가능한 요일 · 타임</div>
           <div class="manager-row-availability">${availabilityDays}</div>
         </div>
         <div class="manager-setting-group manager-unavailable-group">
-          <div class="manager-setting-title">근무 불가 기간</div>
+          <div class="manager-setting-title"><b>3</b> 근무 불가 기간</div>
           ${buildUnavailableRangesCell(name, profile)}
         </div>
         <div class="manager-setting-group manager-action-group">
-          <div class="manager-setting-title">관리</div>
+          <div class="manager-setting-title"><b>4</b> 관리</div>
           <button class="btn secondary small-btn delete-manager-row-btn" data-name="${escapeHtml(
             name
           )}" type="button">근무자 삭제</button>
