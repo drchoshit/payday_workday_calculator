@@ -465,8 +465,9 @@ select:focus {
 
 .manager-condition-list {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   min-width: 0;
-  gap: 6px;
+  gap: 8px;
 }
 
 .manager-condition-guide {
@@ -1419,6 +1420,10 @@ select:focus {
 
 @media (max-width: 1040px) {
   .grid.two {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-condition-list {
     grid-template-columns: 1fr;
   }
 
