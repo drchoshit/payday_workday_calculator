@@ -532,7 +532,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 190px;
+  min-height: 150px;
   padding: 16px 14px;
   border-right: 1px solid #d9e3f7;
   background: linear-gradient(145deg, #f5f8ff, #edf3ff);
@@ -597,7 +597,7 @@ select:focus {
 
 .manager-row-scroll {
   min-width: 0;
-  overflow-x: scroll;
+  overflow-x: hidden;
   overflow-y: hidden;
   scrollbar-gutter: stable;
   scrollbar-color: #8aa8e8 #e8eefb;
@@ -631,9 +631,9 @@ select:focus {
 .manager-row-track {
   display: flex;
   align-items: stretch;
-  width: max-content;
+  width: 100%;
   min-width: 100%;
-  min-height: 177px;
+  min-height: 150px;
 }
 
 .manager-setting-group {
@@ -660,13 +660,15 @@ select:focus {
 }
 
 .manager-basic-group {
-  width: 290px;
+  width: 100%;
+  border-right: 0;
 }
 
 .manager-basic-fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  max-width: 360px;
 }
 
 .manager-basic-fields input[type="number"] {

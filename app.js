@@ -304,26 +304,26 @@ function bindEvents() {
     dom.fixedRuleManager,
     dom.fixedRuleNote,
     dom.newManagerNameInput,
-  ].forEach((input) => {
+  ].filter(Boolean).forEach((input) => {
     input.addEventListener("input", handleScheduleDraftInput);
     input.addEventListener("change", handleScheduleDraftInput);
   });
   dom.addFixedRuleBtn.addEventListener("click", addFixedRule);
   dom.fixedRuleMode.addEventListener("change", syncFixedRuleModeUi);
   dom.fixedRuleBody.addEventListener("click", handleFixedRuleAction);
-  dom.addManagerRowBtn.addEventListener("click", addManagerRow);
-  dom.allAvailabilityOnBtn.addEventListener("click", () => setAllAvailability(true));
-  dom.allAvailabilityOffBtn.addEventListener("click", () => setAllAvailability(false));
-  dom.shift3AvailabilityOnBtn.addEventListener("click", () => setShiftAvailabilityForAll("3T", true));
-  dom.shift3AvailabilityOffBtn.addEventListener("click", () => setShiftAvailabilityForAll("3T", false));
-  dom.fixedPreferenceManagerBody.addEventListener("input", handleScheduleManagerInput);
-  dom.fixedPreferenceManagerBody.addEventListener("change", handleScheduleManagerInput);
+  dom.addManagerRowBtn?.addEventListener("click", addManagerRow);
+  dom.allAvailabilityOnBtn?.addEventListener("click", () => setAllAvailability(true));
+  dom.allAvailabilityOffBtn?.addEventListener("click", () => setAllAvailability(false));
+  dom.shift3AvailabilityOnBtn?.addEventListener("click", () => setShiftAvailabilityForAll("3T", true));
+  dom.shift3AvailabilityOffBtn?.addEventListener("click", () => setShiftAvailabilityForAll("3T", false));
+  dom.fixedPreferenceManagerBody?.addEventListener("input", handleScheduleManagerInput);
+  dom.fixedPreferenceManagerBody?.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("input", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("click", handleScheduleManagerAction);
   dom.scheduleCalendarBody.addEventListener("click", handleScheduleCalendarClick);
-  dom.scheduleHeadcountCalendarBody.addEventListener("click", handleScheduleCalendarClick);
-  dom.scheduleHeadcountCalendarBody.addEventListener("change", handleScheduleHeadcountCalendarChange);
+  dom.scheduleHeadcountCalendarBody?.addEventListener("click", handleScheduleCalendarClick);
+  dom.scheduleHeadcountCalendarBody?.addEventListener("change", handleScheduleHeadcountCalendarChange);
   [
     dom.selectedSlotWorkers,
     dom.selectedSlotPrimaryManager,
@@ -1785,10 +1785,8 @@ function renderScheduleAi() {
   renderShiftTemplateTable();
   renderFixedRuleSelectors();
   renderFixedRuleTable();
-  renderFixedPreferenceManagerCards();
   renderScheduleManagerTable();
   renderScheduleResultTable();
-  renderScheduleHeadcountCalendarTable();
   renderSelectedSlotEditor();
   renderScheduleSummaryTable();
 }
@@ -1931,7 +1929,9 @@ function restoreScheduleDraftInputs() {
   setSelectValueIfOptionExists(dom.fixedRuleShift, draft.fixedRuleShift);
   setSelectValueIfOptionExists(dom.fixedRuleManager, draft.fixedRuleManager);
   dom.fixedRuleNote.value = draft.fixedRuleNote || "";
-  dom.newManagerNameInput.value = draft.newManagerName || "";
+  if (dom.newManagerNameInput) {
+    dom.newManagerNameInput.value = draft.newManagerName || "";
+  }
 }
 
 function setSelectValueIfOptionExists(select, value) {
@@ -1958,7 +1958,9 @@ function saveScheduleDraftFromInputs() {
   draft.fixedRuleShift = cleanText(dom.fixedRuleShift.value);
   draft.fixedRuleManager = stripManagerTitle(cleanText(dom.fixedRuleManager.value));
   draft.fixedRuleNote = cleanText(dom.fixedRuleNote.value);
-  draft.newManagerName = cleanText(dom.newManagerNameInput.value);
+  if (dom.newManagerNameInput) {
+    draft.newManagerName = cleanText(dom.newManagerNameInput.value);
+  }
 }
 
 function syncFixedRuleModeUi() {
@@ -2073,24 +2075,14 @@ function renderFixedPreferenceManagerCards() {
 function buildManagerConditionMatrixRow(name) {
   const profile = ensureManagerProfile(name);
   const employee = ensureEmployeeSetting(name);
-  const fixedOnly = Boolean(profile.fixedPreference.enabled);
-  const disabledAttr = fixedOnly ? " disabled" : "";
-  const availabilityDays = WEEKDAY_ORDER.map((weekday) =>
-    buildAvailabilityDay(name, profile, weekday, true, fixedOnly)
-  ).join("");
   const displayName = formatManagerDisplayName(name);
 
-  return `<section class="manager-row-card${fixedOnly ? " manager-row-locked" : ""}">
+  return `<section class="manager-row-card">
     <div class="manager-row-identity">
       <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
       <span>시급 ${formatWon(employee.hourlyRate)}</span>
-      ${
-        fixedOnly
-          ? '<em class="manager-fixed-lock-badge">고정근무 사용 중</em><small>일반 배정 조건 잠금</small>'
-          : "<small>아래 파란 막대로 좌우 이동</small>"
-      }
     </div>
-    <div class="manager-row-scroll" tabindex="0" aria-label="${escapeHtml(displayName)} 배정 조건 가로 스크롤">
+    <div class="manager-row-scroll">
       <div class="manager-row-track">
         <div class="manager-setting-group manager-basic-group">
           <div class="manager-setting-title"><b>1</b> 기본 배정</div>
@@ -2101,7 +2093,7 @@ function buildManagerConditionMatrixRow(name) {
                 displayName
               )} 최대 주당 T" data-name="${escapeHtml(
                 name
-              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}"${disabledAttr} />
+              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
             </label>
             <label class="field">
               <span>우선순위</span>
@@ -2109,7 +2101,7 @@ function buildManagerConditionMatrixRow(name) {
                 displayName
               )} 우선순위" data-name="${escapeHtml(
                 name
-              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}"${disabledAttr} />
+              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}" />
             </label>
             <label class="field">
               <span>1타임 P</span>
@@ -2117,23 +2109,9 @@ function buildManagerConditionMatrixRow(name) {
                 displayName
               )} 1타임 P" data-name="${escapeHtml(
                 name
-              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}"${disabledAttr} />
+              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
             </label>
           </div>
-        </div>
-        <div class="manager-setting-group manager-availability-group">
-          <div class="manager-setting-title"><b>2</b> 근무 가능한 요일 · 타임</div>
-          <div class="manager-row-availability">${availabilityDays}</div>
-        </div>
-        <div class="manager-setting-group manager-unavailable-group">
-          <div class="manager-setting-title"><b>3</b> 근무 불가 기간</div>
-          ${buildUnavailableRangesCell(name, profile, fixedOnly)}
-        </div>
-        <div class="manager-setting-group manager-action-group">
-          <div class="manager-setting-title"><b>4</b> 관리</div>
-          <button class="btn secondary small-btn delete-manager-row-btn" data-name="${escapeHtml(
-            name
-          )}" type="button">근무자 삭제</button>
         </div>
       </div>
     </div>
