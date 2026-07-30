@@ -466,7 +466,7 @@ select:focus {
 .manager-condition-list {
   display: grid;
   min-width: 0;
-  gap: 12px;
+  gap: 6px;
 }
 
 .manager-condition-guide {
@@ -517,13 +517,13 @@ select:focus {
 
 .manager-row-card {
   display: grid;
-  grid-template-columns: 150px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
   min-width: 0;
   overflow: hidden;
   border: 1px solid #cfdbf3;
-  border-radius: 12px;
+  border-radius: 9px;
   background: #ffffff;
-  box-shadow: 0 3px 12px rgba(27, 59, 121, 0.06);
+  box-shadow: 0 2px 7px rgba(27, 59, 121, 0.05);
 }
 
 .manager-row-identity {
@@ -532,8 +532,8 @@ select:focus {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 150px;
-  padding: 16px 14px;
+  min-height: 78px;
+  padding: 10px 12px;
   border-right: 1px solid #d9e3f7;
   background: linear-gradient(145deg, #f5f8ff, #edf3ff);
   box-shadow: 8px 0 14px rgba(29, 61, 126, 0.06);
@@ -542,7 +542,7 @@ select:focus {
 .manager-row-identity strong {
   display: block;
   color: #17356e;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
@@ -550,7 +550,7 @@ select:focus {
   display: block;
   margin-top: 4px;
   color: var(--ink-500);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .manager-row-identity small {
@@ -633,14 +633,14 @@ select:focus {
   align-items: stretch;
   width: 100%;
   min-width: 100%;
-  min-height: 150px;
+  min-height: 78px;
 }
 
 .manager-setting-group {
   flex: 0 0 auto;
   box-sizing: border-box;
   overflow: hidden;
-  padding: 12px;
+  padding: 8px 12px;
   border-right: 1px solid #dfe7f8;
   background: #ffffff;
 }
@@ -653,13 +653,16 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 10px;
+  margin: 0;
   color: #284680;
   font-size: 12px;
   font-weight: 900;
 }
 
 .manager-basic-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   width: 100%;
   border-right: 0;
 }
@@ -667,14 +670,15 @@ select:focus {
 .manager-basic-fields {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  max-width: 360px;
+  gap: 6px;
+  width: 100%;
+  max-width: 330px;
 }
 
 .manager-basic-fields input[type="number"] {
   min-width: 0;
-  padding: 8px 9px;
-  font-size: 13px;
+  padding: 6px 8px;
+  font-size: 12px;
 }
 
 .manager-fixed-help {
@@ -1480,6 +1484,27 @@ select:focus {
   .manager-condition-fields,
   .unavailable-range-row {
     grid-template-columns: 1fr;
+  }
+
+  .manager-row-card {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-row-identity {
+    min-height: 0;
+    padding: 9px 12px;
+    border-right: 0;
+    border-bottom: 1px solid #d9e3f7;
+  }
+
+  .manager-basic-group {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .manager-basic-fields {
+    max-width: none;
   }
 
   .btn {
