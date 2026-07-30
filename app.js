@@ -166,6 +166,7 @@ const dom = {
   shift3AvailabilityOnBtn: document.getElementById("shift3AvailabilityOnBtn"),
   shift3AvailabilityOffBtn: document.getElementById("shift3AvailabilityOffBtn"),
   fixedPreferenceManagerBody: document.getElementById("fixedPreferenceManagerBody"),
+  scheduleManagerBasicBody: document.getElementById("scheduleManagerBasicBody"),
   scheduleManagerBody: document.getElementById("scheduleManagerBody"),
   scheduleCalendarHead: document.getElementById("scheduleCalendarHead"),
   scheduleCalendarBody: document.getElementById("scheduleCalendarBody"),
@@ -326,6 +327,8 @@ function bindEvents() {
   dom.shift3AvailabilityOffBtn?.addEventListener("click", () => setShiftAvailabilityForAll("3T", false));
   dom.fixedPreferenceManagerBody?.addEventListener("input", handleScheduleManagerInput);
   dom.fixedPreferenceManagerBody?.addEventListener("change", handleScheduleManagerInput);
+  dom.scheduleManagerBasicBody?.addEventListener("input", handleScheduleManagerInput);
+  dom.scheduleManagerBasicBody?.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("input", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("click", handleScheduleManagerAction);
@@ -1794,6 +1797,7 @@ function renderScheduleAi() {
   renderShiftTemplateTable();
   renderFixedRuleSelectors();
   renderFixedRuleTable();
+  renderScheduleManagerBasicCards();
   renderScheduleManagerTable();
   renderScheduleResultTable();
   renderSelectedSlotEditor();
@@ -2137,6 +2141,64 @@ function renderScheduleManagerTable() {
   </table>`;
 }
 
+function renderScheduleManagerBasicCards() {
+  if (!dom.scheduleManagerBasicBody) return;
+  const managers = getManagerNames();
+  if (!managers.length) {
+    dom.scheduleManagerBasicBody.innerHTML = '<div class="empty">관리자 데이터가 없습니다.</div>';
+    return;
+  }
+  dom.scheduleManagerBasicBody.innerHTML = managers
+    .map((name) => buildManagerBasicCard(name))
+    .join("");
+}
+
+function buildManagerBasicCard(name) {
+  const profile = ensureManagerProfile(name);
+  const employee = ensureEmployeeSetting(name);
+  const displayName = formatManagerDisplayName(name);
+  return `<section class="manager-row-card">
+    <div class="manager-row-identity">
+      <strong>${escapeHtml(displayName)}</strong>
+      <span>시급 ${formatWon(employee.hourlyRate)}</span>
+      <small>아래 주간표에서 가능 칸 선택</small>
+    </div>
+    <div class="manager-row-scroll">
+      <div class="manager-row-track">
+        <div class="manager-setting-group manager-basic-group">
+          <div class="manager-setting-title"><b>1</b> 기본 배정</div>
+          <div class="manager-basic-fields">
+            <label class="field">
+              <span>최대 주당 T</span>
+              <input class="schedule-manager-desired" aria-label="${escapeHtml(
+                displayName
+              )} 최대 주당 T" data-name="${escapeHtml(
+                name
+              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
+            </label>
+            <label class="field">
+              <span>우선순위</span>
+              <input class="schedule-manager-priority" aria-label="${escapeHtml(
+                displayName
+              )} 우선순위" data-name="${escapeHtml(
+                name
+              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}" />
+            </label>
+            <label class="field">
+              <span>1타임 P</span>
+              <input class="schedule-manager-point" aria-label="${escapeHtml(
+                displayName
+              )} 1타임 P" data-name="${escapeHtml(
+                name
+              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
 function renderFixedPreferenceManagerCards() {
   const managers = getManagerNames();
   if (!managers.length) {
@@ -2176,7 +2238,7 @@ function buildManagerConditionMatrixRow(name) {
       </td>`;
     }).join("");
   }).join("");
-  const desired = Math.max(0, Math.min(7, Math.round(toNumber(profile.desiredShifts, 0))));
+  const desired = Math.max(0, Math.min(7, Math.round(toNumber(profile.weeklyDesiredShifts, 0))));
 
   return `<tr>
     <th class="manager-weekly-name-cell" scope="row">
@@ -2184,7 +2246,7 @@ function buildManagerConditionMatrixRow(name) {
       <span>시급 ${formatWon(employee.hourlyRate)}</span>
     </th>
     <td class="manager-weekly-count-cell">
-      <input class="schedule-manager-desired" aria-label="${escapeHtml(
+      <input class="schedule-manager-weekly-desired" aria-label="${escapeHtml(
         displayName
       )} 희망 주당 T" data-name="${escapeHtml(
         name
@@ -2300,8 +2362,11 @@ function handleScheduleManagerInput(event) {
   const profile = ensureManagerProfile(name);
 
   if (target.classList.contains("schedule-manager-desired")) {
-    profile.desiredShifts = Math.max(0, Math.min(7, Math.round(toNumber(target.value, 0))));
-    if (event.type === "change") target.value = String(profile.desiredShifts);
+    profile.desiredShifts = Math.max(0, toNumber(target.value, 0));
+  }
+  if (target.classList.contains("schedule-manager-weekly-desired")) {
+    profile.weeklyDesiredShifts = Math.max(0, Math.min(7, Math.round(toNumber(target.value, 0))));
+    if (event.type === "change") target.value = String(profile.weeklyDesiredShifts);
   }
   if (target.classList.contains("schedule-fixed-preference-enabled")) {
     profile.fixedPreference.enabled = target.checked;
@@ -2858,7 +2923,10 @@ function buildWeeklyPatternKey(weekday, shiftId) {
 }
 
 function getManagerWeeklyDesired(name) {
-  return Math.max(0, Math.min(7, Math.round(toNumber(ensureManagerProfile(name).desiredShifts, 0))));
+  return Math.max(
+    0,
+    Math.min(7, Math.round(toNumber(ensureManagerProfile(name).weeklyDesiredShifts, 0)))
+  );
 }
 
 function canUseManagerInWeeklyPattern(name, weekday, shiftId, weeklyCounts, assignedWeekdays) {
@@ -3845,6 +3913,10 @@ function ensureManagerProfile(name) {
   }
   const profile = state.managerProfiles[key];
   profile.desiredShifts = Math.max(0, toNumber(profile.desiredShifts, 0));
+  profile.weeklyDesiredShifts = Math.max(
+    0,
+    Math.min(7, Math.round(toNumber(profile.weeklyDesiredShifts, 0)))
+  );
   profile.priority = Math.max(1, Math.round(toNumber(profile.priority, 5)));
   profile.pointPerShift = Math.min(3, Math.max(1, round2(toNumber(profile.pointPerShift, 1))));
   profile.baseMode = normalizeManagerBaseMode(
@@ -3888,6 +3960,7 @@ function createDefaultManagerProfile() {
   }
   return {
     desiredShifts: 0,
+    weeklyDesiredShifts: 0,
     priority: 5,
     pointPerShift: 1,
     baseMode: MANAGER_BASE_MODES.HOURS,
@@ -5190,6 +5263,10 @@ function normalizeManagerProfiles(value) {
     const derivedBaseHours = rawBaseHours > 0 ? rawBaseHours : round2(rawBasePoints / pointPerShift);
     const profile = {
       desiredShifts: Math.max(0, toNumber(raw?.desiredShifts, base.desiredShifts)),
+      weeklyDesiredShifts: Math.max(
+        0,
+        Math.min(7, Math.round(toNumber(raw?.weeklyDesiredShifts, base.weeklyDesiredShifts)))
+      ),
       priority: Math.max(1, Math.round(toNumber(raw?.priority, base.priority))),
       pointPerShift,
       baseMode,

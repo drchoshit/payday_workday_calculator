@@ -468,6 +468,12 @@ select:focus {
   min-width: 0;
 }
 
+.manager-basic-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .weekly-staffing-head {
   display: flex;
   align-items: flex-end;
@@ -1667,6 +1673,10 @@ select:focus {
   }
 
   .manager-condition-list {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-basic-list {
     grid-template-columns: 1fr;
   }
 
