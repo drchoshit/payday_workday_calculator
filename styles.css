@@ -474,6 +474,47 @@ select:focus {
   gap: 8px;
 }
 
+.manager-unavailable-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.manager-unavailable-card {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #cfdbf3;
+  border-radius: 9px;
+  background: #fbfcff;
+}
+
+.manager-unavailable-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.manager-unavailable-card-head strong {
+  color: #17356e;
+  font-size: 13px;
+}
+
+.manager-unavailable-card-head span {
+  color: var(--ink-500);
+  font-size: 11px;
+}
+
+.manager-unavailable-card .unavailable-ranges,
+.manager-unavailable-card .unavailable-range-list {
+  gap: 5px;
+}
+
+.manager-unavailable-card .unavailable-range-row {
+  padding: 5px;
+}
+
 .weekly-staffing-head {
   display: flex;
   align-items: flex-end;
@@ -536,7 +577,7 @@ select:focus {
 
 .manager-weekly-table {
   width: 100%;
-  min-width: 1480px;
+  min-width: 1160px;
   border: 1px solid #cbd8f2;
   border-collapse: separate;
   border-spacing: 0;
@@ -677,46 +718,6 @@ select:focus {
 .matrix-shift-toggle input:focus + span {
   outline: 2px solid rgba(37, 99, 235, 0.32);
   outline-offset: 1px;
-}
-
-.manager-weekly-unavailable-head,
-.manager-weekly-unavailable-cell {
-  width: 300px;
-}
-
-.manager-weekly-unavailable-cell {
-  padding: 6px;
-  background: #fbfcff;
-  vertical-align: middle;
-}
-
-.manager-weekly-unavailable-cell .unavailable-ranges,
-.manager-weekly-unavailable-cell .unavailable-range-list {
-  gap: 4px;
-}
-
-.manager-weekly-unavailable-cell .unavailable-range-row {
-  grid-template-columns: minmax(104px, 1fr) minmax(104px, 1fr) auto;
-  gap: 4px;
-  padding: 4px;
-}
-
-.manager-weekly-unavailable-cell .field {
-  gap: 2px;
-}
-
-.manager-weekly-unavailable-cell .field span {
-  font-size: 9px;
-}
-
-.manager-weekly-unavailable-cell .unavailable-range-row input[type="date"] {
-  padding: 5px 4px;
-  font-size: 10px;
-}
-
-.manager-weekly-unavailable-cell .btn {
-  padding: 6px 8px;
-  font-size: 10px;
 }
 
 .manager-condition-guide {
@@ -1677,6 +1678,10 @@ select:focus {
   }
 
   .manager-basic-list {
+    grid-template-columns: 1fr;
+  }
+
+  .manager-unavailable-list {
     grid-template-columns: 1fr;
   }
 

@@ -167,6 +167,7 @@ const dom = {
   shift3AvailabilityOffBtn: document.getElementById("shift3AvailabilityOffBtn"),
   fixedPreferenceManagerBody: document.getElementById("fixedPreferenceManagerBody"),
   scheduleManagerBasicBody: document.getElementById("scheduleManagerBasicBody"),
+  scheduleManagerUnavailableBody: document.getElementById("scheduleManagerUnavailableBody"),
   scheduleManagerBody: document.getElementById("scheduleManagerBody"),
   scheduleCalendarHead: document.getElementById("scheduleCalendarHead"),
   scheduleCalendarBody: document.getElementById("scheduleCalendarBody"),
@@ -329,6 +330,9 @@ function bindEvents() {
   dom.fixedPreferenceManagerBody?.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBasicBody?.addEventListener("input", handleScheduleManagerInput);
   dom.scheduleManagerBasicBody?.addEventListener("change", handleScheduleManagerInput);
+  dom.scheduleManagerUnavailableBody?.addEventListener("input", handleScheduleManagerInput);
+  dom.scheduleManagerUnavailableBody?.addEventListener("change", handleScheduleManagerInput);
+  dom.scheduleManagerUnavailableBody?.addEventListener("click", handleScheduleManagerAction);
   dom.scheduleManagerBody.addEventListener("input", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("change", handleScheduleManagerInput);
   dom.scheduleManagerBody.addEventListener("click", handleScheduleManagerAction);
@@ -1798,6 +1802,7 @@ function renderScheduleAi() {
   renderFixedRuleSelectors();
   renderFixedRuleTable();
   renderScheduleManagerBasicCards();
+  renderScheduleManagerUnavailableCards();
   renderScheduleManagerTable();
   renderScheduleResultTable();
   renderSelectedSlotEditor();
@@ -2133,12 +2138,32 @@ function renderScheduleManagerTable() {
         <th class="manager-weekly-name-head" rowspan="2">근무자</th>
         <th class="manager-weekly-count-head" rowspan="2">희망<br />주당 T</th>
         ${weekdayHeaders}
-        <th class="manager-weekly-unavailable-head" rowspan="2">근무 곤란 기간</th>
       </tr>
       <tr>${shiftHeaders}</tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>`;
+}
+
+function renderScheduleManagerUnavailableCards() {
+  if (!dom.scheduleManagerUnavailableBody) return;
+  const managers = getManagerNames();
+  if (!managers.length) {
+    dom.scheduleManagerUnavailableBody.innerHTML = '<div class="empty">관리자 데이터가 없습니다.</div>';
+    return;
+  }
+  dom.scheduleManagerUnavailableBody.innerHTML = managers
+    .map((name) => {
+      const profile = ensureManagerProfile(name);
+      return `<section class="manager-unavailable-card">
+        <div class="manager-unavailable-card-head">
+          <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
+          <span>근무 곤란 기간</span>
+        </div>
+        ${buildUnavailableRangesCell(name, profile)}
+      </section>`;
+    })
+    .join("");
 }
 
 function renderScheduleManagerBasicCards() {
@@ -2253,7 +2278,6 @@ function buildManagerConditionMatrixRow(name) {
       )}" type="number" min="0" max="7" step="1" value="${desired}" />
     </td>
     ${availabilityCells}
-    <td class="manager-weekly-unavailable-cell">${buildUnavailableRangesCell(name, profile)}</td>
   </tr>`;
 }
 
@@ -2452,7 +2476,7 @@ function handleScheduleManagerAction(event) {
     profile.unavailableRanges = normalizeUnavailableRanges(profile.unavailableRanges);
     profile.unavailableRanges.push(createDefaultUnavailableRange());
     persistConfig();
-    renderScheduleManagerTable();
+    renderScheduleManagerUnavailableCards();
     return;
   }
   if (target.classList.contains("delete-unavailable-range-btn")) {
@@ -2462,7 +2486,7 @@ function handleScheduleManagerAction(event) {
       (_, rangeIndex) => rangeIndex !== index
     );
     persistConfig();
-    renderScheduleManagerTable();
+    renderScheduleManagerUnavailableCards();
     return;
   }
   if (target.classList.contains("delete-manager-row-btn")) {
