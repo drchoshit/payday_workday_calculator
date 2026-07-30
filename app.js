@@ -65,6 +65,7 @@ const state = {
   scheduleMonth: cleanText(persisted.scheduleMonth || ""),
   scheduleTemplates: normalizeScheduleTemplates(persisted.scheduleTemplates || []),
   scheduleFixedRules: normalizeScheduleFixedRules(persisted.scheduleFixedRules || []),
+  scheduleWeeklyHeadcounts: normalizeWeeklyHeadcounts(persisted.scheduleWeeklyHeadcounts),
   scheduleAssignments: normalizeScheduleAssignments(persisted.scheduleAssignments || {}),
   scheduleExcludedManagers: normalizeNameList(persisted.scheduleExcludedManagers || []),
   careerLevels: normalizeCareerLevels(persisted.careerLevels || []),
@@ -145,6 +146,8 @@ const dom = {
 
   scheduleMonthInput: document.getElementById("scheduleMonthInput"),
   saveSchedulePageBtn: document.getElementById("saveSchedulePageBtn"),
+  generateWeeklyScheduleBtn: document.getElementById("generateWeeklyScheduleBtn"),
+  weeklyStaffingGrid: document.getElementById("weeklyStaffingGrid"),
   autoModeBtns: Array.from(document.querySelectorAll(".auto-mode-btn")),
   printScheduleBtn: document.getElementById("printScheduleBtn"),
   shiftTemplateBody: document.getElementById("shiftTemplateBody"),
@@ -293,6 +296,11 @@ function bindEvents() {
       generateAutoSchedule({ mode: cleanText(button.dataset.autoMode) });
     });
   });
+  dom.generateWeeklyScheduleBtn?.addEventListener("click", () => {
+    generateAutoSchedule({ mode: "weekly-fixed" });
+  });
+  dom.weeklyStaffingGrid?.addEventListener("input", handleWeeklyHeadcountInput);
+  dom.weeklyStaffingGrid?.addEventListener("change", handleWeeklyHeadcountInput);
   dom.printScheduleBtn.addEventListener("click", printScheduleCalendar);
   dom.shiftTemplateBody.addEventListener("input", handleShiftTemplateInput);
   dom.shiftTemplateBody.addEventListener("change", handleShiftTemplateInput);
@@ -1780,6 +1788,7 @@ function getDefaultScheduleMonth() {
 function renderScheduleAi() {
   syncManagerProfiles();
   renderScheduleMonthInput();
+  renderWeeklyStaffingGrid();
   ensureScheduleRowsForMonth(state.scheduleMonth);
   ensureSelectedScheduleSlot(state.scheduleMonth);
   renderShiftTemplateTable();
@@ -1909,6 +1918,64 @@ function renderFixedRuleSelectors() {
 
   restoreScheduleDraftInputs();
   syncFixedRuleModeUi();
+}
+
+function renderWeeklyStaffingGrid() {
+  if (!dom.weeklyStaffingGrid) return;
+  const dayHeaders = WEEKDAY_ORDER.map(
+    (weekday) => `<th scope="col">${WEEKDAYS[weekday]}</th>`
+  ).join("");
+  const rows = SHIFT_IDS.map((shiftId) => {
+    const cells = WEEKDAY_ORDER.map((weekday) => {
+      const count = getWeeklyHeadcount(weekday, shiftId);
+      return `<td>
+        <input class="weekly-headcount-input" aria-label="${WEEKDAYS[weekday]}요일 ${shiftId} 필요 인원"
+          data-day="${weekday}" data-shift-id="${shiftId}" type="number" min="0" max="2" step="1"
+          value="${count}" />
+      </td>`;
+    }).join("");
+    return `<tr><th scope="row">${shiftId}</th>${cells}</tr>`;
+  }).join("");
+
+  dom.weeklyStaffingGrid.innerHTML = `<table class="weekly-staffing-table">
+    <thead><tr><th scope="col">타임</th>${dayHeaders}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function handleWeeklyHeadcountInput(event) {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !target.classList.contains("weekly-headcount-input")) {
+    return;
+  }
+  const weekday = Math.max(0, Math.min(6, Math.round(toNumber(target.dataset.day, 0))));
+  const shiftId = cleanText(target.dataset.shiftId);
+  if (!SHIFT_IDS.includes(shiftId)) return;
+  const count = Math.max(0, Math.min(2, Math.round(toNumber(target.value, 0))));
+  ensureWeeklyHeadcountDay(weekday);
+  state.scheduleWeeklyHeadcounts[weekday][shiftId] = count;
+  if (event.type === "change") target.value = String(count);
+  persistConfig();
+}
+
+function getWeeklyHeadcount(weekday, shiftId) {
+  ensureWeeklyHeadcountDay(weekday);
+  return Math.max(0, Math.min(2, Math.round(toNumber(state.scheduleWeeklyHeadcounts[weekday][shiftId], 1))));
+}
+
+function ensureWeeklyHeadcountDay(weekday) {
+  if (!state.scheduleWeeklyHeadcounts || typeof state.scheduleWeeklyHeadcounts !== "object") {
+    state.scheduleWeeklyHeadcounts = normalizeWeeklyHeadcounts(null);
+  }
+  if (!state.scheduleWeeklyHeadcounts[weekday] || typeof state.scheduleWeeklyHeadcounts[weekday] !== "object") {
+    state.scheduleWeeklyHeadcounts[weekday] = {};
+  }
+  SHIFT_IDS.forEach((shiftId) => {
+    const current = state.scheduleWeeklyHeadcounts[weekday][shiftId];
+    if (!Number.isFinite(toNumber(current, NaN))) {
+      state.scheduleWeeklyHeadcounts[weekday][shiftId] = 1;
+    }
+  });
 }
 
 function getScheduleDrafts() {
@@ -2048,7 +2115,26 @@ function renderScheduleManagerTable() {
     return;
   }
 
-  dom.scheduleManagerBody.innerHTML = managers.map((name) => buildManagerConditionMatrixRow(name)).join("");
+  const weekdayHeaders = WEEKDAY_ORDER.map(
+    (weekday) => `<th class="manager-weekly-day-head" colspan="3">${WEEKDAYS[weekday]}</th>`
+  ).join("");
+  const shiftHeaders = WEEKDAY_ORDER.map(() =>
+    SHIFT_IDS.map((shiftId) => `<th class="manager-weekly-shift-head">${shiftId.replace("T", "")}</th>`).join("")
+  ).join("");
+  const rows = managers.map((name) => buildManagerConditionMatrixRow(name)).join("");
+
+  dom.scheduleManagerBody.innerHTML = `<table class="manager-weekly-table">
+    <thead>
+      <tr>
+        <th class="manager-weekly-name-head" rowspan="2">근무자</th>
+        <th class="manager-weekly-count-head" rowspan="2">희망<br />주당 T</th>
+        ${weekdayHeaders}
+        <th class="manager-weekly-unavailable-head" rowspan="2">근무 곤란 기간</th>
+      </tr>
+      <tr>${shiftHeaders}</tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function renderFixedPreferenceManagerCards() {
@@ -2076,46 +2162,37 @@ function buildManagerConditionMatrixRow(name) {
   const profile = ensureManagerProfile(name);
   const employee = ensureEmployeeSetting(name);
   const displayName = formatManagerDisplayName(name);
+  const availabilityCells = WEEKDAY_ORDER.map((weekday) => {
+    ensureManagerProfileAvailability(profile, weekday);
+    return SHIFT_IDS.map((shiftId) => {
+      const checked = Boolean(profile.availability?.[weekday]?.[shiftId]);
+      return `<td class="manager-weekly-availability-cell">
+        <label class="matrix-shift-toggle" title="${WEEKDAYS[weekday]}요일 ${shiftId}">
+          <input class="schedule-manager-availability" data-name="${escapeHtml(
+            name
+          )}" data-day="${weekday}" data-shift-id="${shiftId}" type="checkbox" ${checked ? "checked" : ""} />
+          <span></span>
+        </label>
+      </td>`;
+    }).join("");
+  }).join("");
+  const desired = Math.max(0, Math.min(7, Math.round(toNumber(profile.desiredShifts, 0))));
 
-  return `<section class="manager-row-card">
-    <div class="manager-row-identity">
-      <strong>${escapeHtml(formatManagerDisplayName(name))}</strong>
+  return `<tr>
+    <th class="manager-weekly-name-cell" scope="row">
+      <strong>${escapeHtml(displayName)}</strong>
       <span>시급 ${formatWon(employee.hourlyRate)}</span>
-    </div>
-    <div class="manager-row-scroll">
-      <div class="manager-row-track">
-        <div class="manager-setting-group manager-basic-group">
-          <div class="manager-setting-title"><b>1</b> 기본 배정</div>
-          <div class="manager-basic-fields">
-            <label class="field">
-              <span>최대 주당 T</span>
-              <input class="schedule-manager-desired" aria-label="${escapeHtml(
-                displayName
-              )} 최대 주당 T" data-name="${escapeHtml(
-                name
-              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
-            </label>
-            <label class="field">
-              <span>우선순위</span>
-              <input class="schedule-manager-priority" aria-label="${escapeHtml(
-                displayName
-              )} 우선순위" data-name="${escapeHtml(
-                name
-              )}" type="number" min="1" step="1" value="${toNumber(profile.priority, 5)}" />
-            </label>
-            <label class="field">
-              <span>1타임 P</span>
-              <input class="schedule-manager-point" aria-label="${escapeHtml(
-                displayName
-              )} 1타임 P" data-name="${escapeHtml(
-                name
-              )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" />
-            </label>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>`;
+    </th>
+    <td class="manager-weekly-count-cell">
+      <input class="schedule-manager-desired" aria-label="${escapeHtml(
+        displayName
+      )} 희망 주당 T" data-name="${escapeHtml(
+        name
+      )}" type="number" min="0" max="7" step="1" value="${desired}" />
+    </td>
+    ${availabilityCells}
+    <td class="manager-weekly-unavailable-cell">${buildUnavailableRangesCell(name, profile)}</td>
+  </tr>`;
 }
 
 function buildFixedPreferenceEditor(name, profile) {
@@ -2223,7 +2300,8 @@ function handleScheduleManagerInput(event) {
   const profile = ensureManagerProfile(name);
 
   if (target.classList.contains("schedule-manager-desired")) {
-    profile.desiredShifts = Math.max(0, toNumber(target.value, 0));
+    profile.desiredShifts = Math.max(0, Math.min(7, Math.round(toNumber(target.value, 0))));
+    if (event.type === "change") target.value = String(profile.desiredShifts);
   }
   if (target.classList.contains("schedule-fixed-preference-enabled")) {
     profile.fixedPreference.enabled = target.checked;
@@ -2353,7 +2431,6 @@ function addManagerRow() {
 function setAllAvailability(checked) {
   getManagerNames().forEach((name) => {
     const profile = ensureManagerProfile(name);
-    if (profile.fixedPreference.enabled) return;
     for (let day = 0; day < 7; day += 1) {
       ensureManagerProfileAvailability(profile, day);
       SHIFT_IDS.forEach((shiftId) => {
@@ -2369,7 +2446,6 @@ function setShiftAvailabilityForAll(shiftId, checked) {
   if (!SHIFT_IDS.includes(shiftId)) return;
   getManagerNames().forEach((name) => {
     const profile = ensureManagerProfile(name);
-    if (profile.fixedPreference.enabled) return;
     for (let day = 0; day < 7; day += 1) {
       ensureManagerProfileAvailability(profile, day);
       profile.availability[day][shiftId] = checked;
@@ -2456,7 +2532,7 @@ function normalizeAutoScheduleOptions(options) {
     ? Math.max(0, Math.min(6, Math.round(weekdayRaw)))
     : null;
   const shiftStart = SHIFT_IDS.includes(cleanText(source.shiftStart)) ? cleanText(source.shiftStart) : "";
-  const mode = ["balanced", "maximum", "fixed", "random"].includes(cleanText(source.mode))
+  const mode = ["balanced", "maximum", "fixed", "random", "weekly-fixed"].includes(cleanText(source.mode))
     ? cleanText(source.mode)
     : "balanced";
   return { weekdayStart, shiftStart, mode };
@@ -2474,6 +2550,7 @@ function getAutoScheduleModeLabel(options) {
     maximum: "최대 자동 배정",
     fixed: "고정근무 우선 자동 배정",
     random: "새 조합 자동 배정",
+    "weekly-fixed": "주간 고정 스케줄 자동 배정",
   }[options.mode] || "골고루 자동 배정";
 }
 
@@ -2484,7 +2561,8 @@ function buildAutoSchedulePopupMessage(options, rows) {
     0
   );
   const empty = Math.max(0, totalRequired - assigned);
-  const fixedCount = rows.filter((row) => row.source === "고정규칙").length;
+  const fixedCount = rows.filter((row) => row.source === "고정규칙" || row.source === "주간고정").length;
+  const replacementCount = rows.filter((row) => row.source === "대체배정").length;
   const unassignedSlots = rows.filter((row) => !row.primaryManager).length;
   return [
     `${formatMonthLabel(state.scheduleMonth)} ${getAutoScheduleModeLabel(options)} 완료`,
@@ -2494,7 +2572,8 @@ function buildAutoSchedulePopupMessage(options, rows) {
     `배정 완료: ${assigned}명`,
     `미배정 인원: ${empty}명`,
     `주 담당 미배정 타임: ${unassignedSlots}개`,
-    `고정 규칙 반영: ${fixedCount}개`,
+    `고정 패턴 반영: ${fixedCount}개`,
+    `곤란 기간 대체 배정: ${replacementCount}개`,
     "",
     "캘린더의 월간 근무자 배정 결과를 확인하세요.",
   ].join("\n");
@@ -2516,6 +2595,7 @@ function getAutoScheduleOrderDescription(options) {
     maximum: "배정 기준: 우선순위와 남은 주간 한도가 큰 근무자부터 최대 배정",
     fixed: "배정 기준: 고정근무 희망의 주당 최소 횟수를 먼저 배정",
     random: "배정 기준: 같은 조건의 후보 중 무작위로 새로운 조합 생성",
+    "weekly-fixed": "배정 기준: 요일·타임별 가능 여부와 희망 주당 횟수로 같은 주간 패턴을 반복 배정",
   }[options.mode] || "배정 기준: 날짜순 균등 배정";
 }
 
@@ -2524,6 +2604,9 @@ function showSchedulePopup(message) {
 }
 
 function buildAutoScheduleForMonth(month, managers, options = {}) {
+  if (options.mode === "weekly-fixed") {
+    return buildWeeklyFixedScheduleForMonth(month, managers);
+  }
   const assignmentMap = createManagerAssignmentMap(managers);
   const existingRows = getScheduleRowsForMonth(month);
   const workerSlotMap = new Map(
@@ -2594,6 +2677,246 @@ function buildAutoScheduleForMonth(month, managers, options = {}) {
   });
 
   return rows.sort(compareScheduleRows);
+}
+
+function buildWeeklyFixedScheduleForMonth(month, managers) {
+  const weeklyPattern = buildWeeklyFixedPattern(managers);
+  const assignmentMap = createManagerAssignmentMap(managers);
+  const rows = [];
+
+  listDatesInMonth(month).forEach((dateKey) => {
+    const date = parseDateOnly(dateKey);
+    if (!date) return;
+    const weekday = date.getDay();
+    const assignedToday = new Set();
+
+    state.scheduleTemplates.forEach((template) => {
+      const workerSlots = getWeeklyHeadcount(weekday, template.id);
+      if (workerSlots <= 0) return;
+
+      const plannedManagers = weeklyPattern.get(buildWeeklyPatternKey(weekday, template.id)) || [];
+      const assignedManagers = [];
+      let usedReplacement = false;
+
+      plannedManagers.slice(0, workerSlots).forEach((name) => {
+        if (
+          name &&
+          !assignedToday.has(name) &&
+          isManagerWeeklySlotAvailable(name, weekday, template.id, dateKey) &&
+          isWithinWeeklyDesiredLimit(name, dateKey, assignmentMap)
+        ) {
+          assignedManagers.push(name);
+          assignedToday.add(name);
+          recordManagerAssignment(
+            assignmentMap,
+            name,
+            dateKey,
+            calculateTimeRangeHours(dateKey, template.start, template.end),
+            template.id
+          );
+        }
+      });
+
+      while (assignedManagers.length < workerSlots) {
+        const replacement = pickWeeklyReplacementManager(
+          managers,
+          dateKey,
+          weekday,
+          template.id,
+          assignmentMap,
+          new Set([...assignedToday, ...assignedManagers])
+        );
+        if (!replacement) break;
+        assignedManagers.push(replacement);
+        assignedToday.add(replacement);
+        usedReplacement = true;
+        recordManagerAssignment(
+          assignmentMap,
+          replacement,
+          dateKey,
+          calculateTimeRangeHours(dateKey, template.start, template.end),
+          template.id
+        );
+      }
+
+      const primaryManager = assignedManagers[0] || "";
+      const secondaryManager = assignedManagers[1] || "";
+      rows.push(
+        normalizeScheduleRow({
+          id: `sch-weekly-${month}-${dateKey}-${template.id}`,
+          date: dateKey,
+          weekday,
+          shiftId: template.id,
+          workerSlots,
+          shiftStart: template.start,
+          shiftEnd: template.end,
+          primaryManager,
+          primaryStart: primaryManager ? template.start : "",
+          primaryEnd: primaryManager ? template.end : "",
+          secondaryManager,
+          secondaryStart: secondaryManager ? template.start : "",
+          secondaryEnd: secondaryManager ? template.end : "",
+          note: usedReplacement ? "근무 곤란 기간 대체 배정" : "",
+          source:
+            assignedManagers.length < workerSlots
+              ? "미배정"
+              : usedReplacement
+              ? "대체배정"
+              : "주간고정",
+        })
+      );
+    });
+  });
+
+  return rows.sort(compareScheduleRows);
+}
+
+function buildWeeklyFixedPattern(managers) {
+  const pattern = new Map();
+  const weeklyCounts = new Map(managers.map((name) => [name, 0]));
+  const assignedWeekdays = new Map(managers.map((name) => [name, new Set()]));
+  const slots = [];
+
+  WEEKDAY_ORDER.forEach((weekday) => {
+    SHIFT_IDS.forEach((shiftId) => {
+      const workerSlots = getWeeklyHeadcount(weekday, shiftId);
+      if (workerSlots <= 0) return;
+      const availableCount = managers.filter(
+        (name) =>
+          getManagerWeeklyDesired(name) > 0 &&
+          isManagerWeeklySlotAvailable(name, weekday, shiftId)
+      ).length;
+      slots.push({ weekday, shiftId, workerSlots, availableCount });
+    });
+  });
+
+  slots
+    .sort((a, b) => {
+      if (a.availableCount !== b.availableCount) return a.availableCount - b.availableCount;
+      if (a.weekday !== b.weekday) return WEEKDAY_ORDER.indexOf(a.weekday) - WEEKDAY_ORDER.indexOf(b.weekday);
+      return getShiftSortIndex(a.shiftId) - getShiftSortIndex(b.shiftId);
+    })
+    .forEach(({ weekday, shiftId, workerSlots }) => {
+      const selected = [];
+      const weeklyRule = state.scheduleFixedRules.find(
+        (rule) =>
+          rule.mode === "weekly" &&
+          toNumber(rule.weekday, -1) === weekday &&
+          rule.shiftId === shiftId
+      );
+      if (
+        weeklyRule?.manager &&
+        managers.includes(weeklyRule.manager) &&
+        canUseManagerInWeeklyPattern(
+          weeklyRule.manager,
+          weekday,
+          shiftId,
+          weeklyCounts,
+          assignedWeekdays
+        )
+      ) {
+        selected.push(weeklyRule.manager);
+        recordWeeklyPatternAssignment(weeklyRule.manager, weekday, weeklyCounts, assignedWeekdays);
+      }
+
+      while (selected.length < workerSlots) {
+        const candidates = managers
+          .filter(
+            (name) =>
+              !selected.includes(name) &&
+              canUseManagerInWeeklyPattern(name, weekday, shiftId, weeklyCounts, assignedWeekdays)
+          )
+          .sort((a, b) => {
+            const desiredA = getManagerWeeklyDesired(a);
+            const desiredB = getManagerWeeklyDesired(b);
+            const countA = toNumber(weeklyCounts.get(a), 0);
+            const countB = toNumber(weeklyCounts.get(b), 0);
+            const progressA = desiredA > 0 ? countA / desiredA : 1;
+            const progressB = desiredB > 0 ? countB / desiredB : 1;
+            if (progressA !== progressB) return progressA - progressB;
+            if (countA !== countB) return countA - countB;
+            const priorityDiff =
+              toNumber(ensureManagerProfile(a).priority, 5) -
+              toNumber(ensureManagerProfile(b).priority, 5);
+            if (priorityDiff !== 0) return priorityDiff;
+            return a.localeCompare(b, "ko-KR");
+          });
+        const selectedName = candidates[0] || "";
+        if (!selectedName) break;
+        selected.push(selectedName);
+        recordWeeklyPatternAssignment(selectedName, weekday, weeklyCounts, assignedWeekdays);
+      }
+
+      pattern.set(buildWeeklyPatternKey(weekday, shiftId), selected);
+    });
+
+  return pattern;
+}
+
+function buildWeeklyPatternKey(weekday, shiftId) {
+  return `${weekday}:${shiftId}`;
+}
+
+function getManagerWeeklyDesired(name) {
+  return Math.max(0, Math.min(7, Math.round(toNumber(ensureManagerProfile(name).desiredShifts, 0))));
+}
+
+function canUseManagerInWeeklyPattern(name, weekday, shiftId, weeklyCounts, assignedWeekdays) {
+  const desired = getManagerWeeklyDesired(name);
+  return (
+    desired > 0 &&
+    toNumber(weeklyCounts.get(name), 0) < desired &&
+    !assignedWeekdays.get(name)?.has(weekday) &&
+    isManagerWeeklySlotAvailable(name, weekday, shiftId)
+  );
+}
+
+function recordWeeklyPatternAssignment(name, weekday, weeklyCounts, assignedWeekdays) {
+  weeklyCounts.set(name, toNumber(weeklyCounts.get(name), 0) + 1);
+  if (!assignedWeekdays.has(name)) assignedWeekdays.set(name, new Set());
+  assignedWeekdays.get(name).add(weekday);
+}
+
+function isManagerWeeklySlotAvailable(name, weekday, shiftId, dateKey = "") {
+  const profile = ensureManagerProfile(name);
+  ensureManagerProfileAvailability(profile, weekday);
+  if (!profile.availability?.[weekday]?.[shiftId]) return false;
+  return !dateKey || !isDateInUnavailableRanges(dateKey, profile.unavailableRanges);
+}
+
+function isWithinWeeklyDesiredLimit(name, dateKey, assignmentMap) {
+  const desired = getManagerWeeklyDesired(name);
+  if (desired <= 0) return false;
+  return getWeeklyAssignmentUnits(assignmentMap, name, getScheduleWeekKey(dateKey)) < desired;
+}
+
+function pickWeeklyReplacementManager(
+  managers,
+  dateKey,
+  weekday,
+  shiftId,
+  assignmentMap,
+  excluded = new Set()
+) {
+  const weekKey = getScheduleWeekKey(dateKey);
+  const candidates = managers.filter(
+    (name) =>
+      !excluded.has(name) &&
+      !isManagerAssignedOnDate(assignmentMap, name, dateKey) &&
+      isManagerWeeklySlotAvailable(name, weekday, shiftId, dateKey) &&
+      isWithinWeeklyDesiredLimit(name, dateKey, assignmentMap)
+  );
+  candidates.sort((a, b) => {
+    const assignedA = getWeeklyAssignmentUnits(assignmentMap, a, weekKey);
+    const assignedB = getWeeklyAssignmentUnits(assignmentMap, b, weekKey);
+    if (assignedA !== assignedB) return assignedA - assignedB;
+    const priorityDiff =
+      toNumber(ensureManagerProfile(a).priority, 5) -
+      toNumber(ensureManagerProfile(b).priority, 5);
+    if (priorityDiff !== 0) return priorityDiff;
+    return a.localeCompare(b, "ko-KR");
+  });
+  return candidates[0] || "";
 }
 
 function buildAutoScheduleSlots(month, options = {}) {
@@ -4804,6 +5127,21 @@ function normalizeScheduleAssignments(value) {
   return next;
 }
 
+function normalizeWeeklyHeadcounts(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const normalized = {};
+  for (let weekday = 0; weekday < 7; weekday += 1) {
+    normalized[weekday] = {};
+    SHIFT_IDS.forEach((shiftId) => {
+      normalized[weekday][shiftId] = Math.max(
+        0,
+        Math.min(2, Math.round(toNumber(source?.[weekday]?.[shiftId], 1)))
+      );
+    });
+  }
+  return normalized;
+}
+
 function normalizeScheduleRow(raw) {
   if (!raw || typeof raw !== "object") return null;
   const date = cleanText(raw.date);
@@ -4942,6 +5280,7 @@ function buildPersistPayload() {
     scheduleMonth: state.scheduleMonth,
     scheduleTemplates: state.scheduleTemplates,
     scheduleFixedRules: state.scheduleFixedRules,
+    scheduleWeeklyHeadcounts: state.scheduleWeeklyHeadcounts,
     scheduleAssignments: state.scheduleAssignments,
     scheduleExcludedManagers: state.scheduleExcludedManagers,
     careerLevels: state.careerLevels,
@@ -5107,6 +5446,7 @@ function restoreFromImportedData(data) {
   state.scheduleMonth = cleanText(data.scheduleMonth || "");
   state.scheduleTemplates = normalizeScheduleTemplates(data.scheduleTemplates || []);
   state.scheduleFixedRules = normalizeScheduleFixedRules(data.scheduleFixedRules || []);
+  state.scheduleWeeklyHeadcounts = normalizeWeeklyHeadcounts(data.scheduleWeeklyHeadcounts);
   state.scheduleAssignments = normalizeScheduleAssignments(data.scheduleAssignments || {});
   state.scheduleExcludedManagers = normalizeNameList(data.scheduleExcludedManagers || []);
   state.careerLevels = normalizeCareerLevels(data.careerLevels || []);
