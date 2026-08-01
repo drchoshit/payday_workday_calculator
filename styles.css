@@ -680,20 +680,17 @@ select:focus {
   background: #ffffff;
 }
 
-.matrix-shift-toggle {
+.matrix-shift-toggle-btn {
   display: block;
   width: 100%;
   height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
   cursor: pointer;
 }
 
-.matrix-shift-toggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.matrix-shift-toggle span {
+.matrix-shift-toggle-btn span {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -706,16 +703,28 @@ select:focus {
   font-weight: 900;
 }
 
-.matrix-shift-toggle input:checked + span {
+.matrix-shift-toggle-btn.is-available span {
   border-color: #f2d600;
   background: #fff72b;
 }
 
-.matrix-shift-toggle input:checked + span::after {
+.matrix-shift-toggle-btn.is-available span::after {
   content: "○";
 }
 
-.matrix-shift-toggle input:focus + span {
+.matrix-shift-toggle-btn.is-fixed span {
+  border-color: #1d4ed8;
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px #ffffff, 0 2px 7px rgba(37, 99, 235, 0.28);
+}
+
+.matrix-shift-toggle-btn.is-fixed span::after {
+  content: "★";
+  font-size: 14px;
+}
+
+.matrix-shift-toggle-btn:focus-visible span {
   outline: 2px solid rgba(37, 99, 235, 0.32);
   outline-offset: 1px;
 }
