@@ -1638,6 +1638,12 @@ select:focus {
   margin-bottom: 12px;
 }
 
+.statement-bonus-card[hidden],
+.inline-fields > #bonusHoursToggleBtn[hidden],
+.totals > div[hidden] {
+  display: none;
+}
+
 .bonus-hours-panel {
   display: grid;
   grid-template-columns: minmax(180px, 260px) minmax(220px, 1fr);
@@ -1865,6 +1871,7 @@ select:focus {
   #tab-setup,
   #tab-summary,
   .compact-field,
+  #bonusHoursToggleBtn,
   #printStatementBtn,
   .app-header .subtitle,
   .app-header .eyebrow {

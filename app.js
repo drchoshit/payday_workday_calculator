@@ -53,6 +53,7 @@ const DEFAULT_CAREER_LEVELS = [
 ];
 
 const persisted = loadPersistedConfig();
+let bonusEditorOpen = false;
 
 const state = {
   settings: { ...DEFAULT_SETTINGS, ...(persisted.settings || {}) },
@@ -130,12 +131,15 @@ const dom = {
   statementCareerStats: document.getElementById("statementCareerStats"),
   statementBody: document.getElementById("statementBody"),
   weeklySummaryBody: document.getElementById("weeklySummaryBody"),
+  statementBonusCard: document.getElementById("statementBonusCard"),
+  bonusHoursToggleBtn: document.getElementById("bonusHoursToggleBtn"),
   bonusHoursInput: document.getElementById("bonusHoursInput"),
   bonusPayPreview: document.getElementById("bonusPayPreview"),
   bonusPayFormula: document.getElementById("bonusPayFormula"),
   totalHoursCell: document.getElementById("totalHoursCell"),
   basePayCell: document.getElementById("basePayCell"),
   allowanceCell: document.getElementById("allowanceCell"),
+  bonusPayRow: document.getElementById("bonusPayRow"),
   bonusPayCell: document.getElementById("bonusPayCell"),
   grossPayCell: document.getElementById("grossPayCell"),
   netPayCell: document.getElementById("netPayCell"),
@@ -229,6 +233,7 @@ function bindEvents() {
   dom.fileInput.addEventListener("change", handleFileUpload);
   dom.monthSelect.addEventListener("change", () => {
     state.selectedMonth = dom.monthSelect.value;
+    bonusEditorOpen = false;
     ensureSelectedEmployeeForMonth();
     syncMonthSelectors();
     persistConfig();
@@ -241,6 +246,7 @@ function bindEvents() {
   });
   dom.summaryMonthSelect.addEventListener("change", () => {
     state.selectedMonth = dom.summaryMonthSelect.value;
+    bonusEditorOpen = false;
     state.summaryCategory = "all";
     ensureSelectedEmployeeForMonth();
     syncMonthSelectors();
@@ -373,11 +379,19 @@ function bindEvents() {
 
   dom.statementEmployeeSelect.addEventListener("change", () => {
     state.selectedEmployee = dom.statementEmployeeSelect.value;
+    bonusEditorOpen = false;
     persistConfig();
     renderStatement();
   });
 
   dom.printStatementBtn.addEventListener("click", () => window.print());
+
+  dom.bonusHoursToggleBtn.addEventListener("click", () => {
+    if (!state.selectedMonth || !state.selectedEmployee) return;
+    bonusEditorOpen = true;
+    renderStatement();
+    dom.bonusHoursInput.focus();
+  });
 
   dom.bonusHoursInput.addEventListener("change", handleBonusHoursChange);
 
@@ -1553,6 +1567,7 @@ function handleBonusHoursChange() {
   if (!state.selectedMonth || !state.selectedEmployee) return;
   const bonusHours = Math.max(0, round2(toNumber(dom.bonusHoursInput.value, 0)));
   setBonusHours(state.selectedEmployee, state.selectedMonth, bonusHours);
+  bonusEditorOpen = bonusHours > 0;
   persistConfig();
   renderStatement();
   renderSummary();
@@ -1564,6 +1579,10 @@ function handleBonusHoursChange() {
 }
 
 function renderBonusHours(payroll, hourlyRate) {
+  const hasBonus = payroll.totals.bonusHours > 0;
+  dom.statementBonusCard.hidden = !hasBonus && !bonusEditorOpen;
+  dom.bonusHoursToggleBtn.hidden = hasBonus || bonusEditorOpen;
+  dom.bonusHoursToggleBtn.disabled = false;
   dom.bonusHoursInput.disabled = false;
   dom.bonusHoursInput.value = payroll.totals.bonusHours ? String(payroll.totals.bonusHours) : "";
   dom.bonusPayPreview.textContent = formatWon(payroll.totals.bonusPay);
@@ -1573,6 +1592,10 @@ function renderBonusHours(payroll, hourlyRate) {
 }
 
 function renderBonusHoursEmpty() {
+  bonusEditorOpen = false;
+  dom.statementBonusCard.hidden = true;
+  dom.bonusHoursToggleBtn.hidden = false;
+  dom.bonusHoursToggleBtn.disabled = true;
   dom.bonusHoursInput.value = "";
   dom.bonusHoursInput.disabled = true;
   dom.bonusPayPreview.textContent = "₩0";
@@ -1583,6 +1606,7 @@ function renderStatementTotals(payroll) {
   dom.totalHoursCell.textContent = formatDurationText(payroll.totals.hours);
   dom.basePayCell.textContent = formatWon(payroll.totals.basePay);
   dom.allowanceCell.textContent = formatWon(payroll.totals.allowances);
+  dom.bonusPayRow.hidden = payroll.totals.bonusHours <= 0;
   dom.bonusPayCell.textContent = formatWon(payroll.totals.bonusPay);
   dom.grossPayCell.textContent = formatWon(payroll.totals.grossPay);
   dom.netPayCell.textContent = formatWon(payroll.totals.netPay);
@@ -1637,6 +1661,7 @@ function renderTotalsEmpty() {
   dom.totalHoursCell.textContent = "0시간 0분";
   dom.basePayCell.textContent = "₩0";
   dom.allowanceCell.textContent = "₩0";
+  dom.bonusPayRow.hidden = true;
   dom.bonusPayCell.textContent = "₩0";
   dom.grossPayCell.textContent = "₩0";
   dom.netPayCell.textContent = "₩0";
