@@ -58,6 +58,7 @@ const state = {
   settings: { ...DEFAULT_SETTINGS, ...(persisted.settings || {}) },
   holidays: sanitizeHolidayList(persisted.holidays || []),
   employeeSettings: persisted.employeeSettings || {},
+  bonusHours: normalizeBonusHours(persisted.bonusHours || {}),
   entries: normalizePersistedEntries(persisted.entries || []),
   selectedMonth: cleanText(persisted.selectedMonth || ""),
   selectedEmployee: cleanText(persisted.selectedEmployee || ""),
@@ -129,9 +130,13 @@ const dom = {
   statementCareerStats: document.getElementById("statementCareerStats"),
   statementBody: document.getElementById("statementBody"),
   weeklySummaryBody: document.getElementById("weeklySummaryBody"),
+  bonusHoursInput: document.getElementById("bonusHoursInput"),
+  bonusPayPreview: document.getElementById("bonusPayPreview"),
+  bonusPayFormula: document.getElementById("bonusPayFormula"),
   totalHoursCell: document.getElementById("totalHoursCell"),
   basePayCell: document.getElementById("basePayCell"),
   allowanceCell: document.getElementById("allowanceCell"),
+  bonusPayCell: document.getElementById("bonusPayCell"),
   grossPayCell: document.getElementById("grossPayCell"),
   netPayCell: document.getElementById("netPayCell"),
 
@@ -373,6 +378,8 @@ function bindEvents() {
   });
 
   dom.printStatementBtn.addEventListener("click", () => window.print());
+
+  dom.bonusHoursInput.addEventListener("change", handleBonusHoursChange);
 
   dom.statementBody.addEventListener("change", (event) => {
     const target = event.target;
@@ -1475,12 +1482,14 @@ function renderStatement() {
     dom.statementBody.innerHTML =
       '<tr><td colspan="12" class="empty">표시할 근무 내역이 없습니다.</td></tr>';
     dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
+    renderBonusHoursEmpty();
     renderTotalsEmpty();
     return;
   }
 
   const payroll = computeEmployeeMonthPayroll(state.selectedEmployee, state.selectedMonth);
   const hourlyRate = getEffectiveHourlyRate(state.selectedEmployee, state.selectedMonth);
+  renderBonusHours(payroll, hourlyRate);
 
   dom.statementMeta.textContent = `${formatMonthLabel(state.selectedMonth)} · ${
     state.selectedEmployee
@@ -1491,7 +1500,7 @@ function renderStatement() {
     dom.statementBody.innerHTML =
       '<tr><td colspan="12" class="empty">선택한 월의 근무기록이 없습니다.</td></tr>';
     dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
-    renderTotalsEmpty();
+    renderStatementTotals(payroll);
     return;
   }
 
@@ -1537,9 +1546,44 @@ function renderStatement() {
       .join("");
   }
 
+  renderStatementTotals(payroll);
+}
+
+function handleBonusHoursChange() {
+  if (!state.selectedMonth || !state.selectedEmployee) return;
+  const bonusHours = Math.max(0, round2(toNumber(dom.bonusHoursInput.value, 0)));
+  setBonusHours(state.selectedEmployee, state.selectedMonth, bonusHours);
+  persistConfig();
+  renderStatement();
+  renderSummary();
+  setStatus(
+    `${formatMonthLabel(state.selectedMonth)} ${state.selectedEmployee}의 보너스 시간을 ${formatDurationText(
+      bonusHours
+    )}(으)로 저장했습니다.`
+  );
+}
+
+function renderBonusHours(payroll, hourlyRate) {
+  dom.bonusHoursInput.disabled = false;
+  dom.bonusHoursInput.value = payroll.totals.bonusHours ? String(payroll.totals.bonusHours) : "";
+  dom.bonusPayPreview.textContent = formatWon(payroll.totals.bonusPay);
+  dom.bonusPayFormula.textContent = `${formatDurationText(payroll.totals.bonusHours)} × 시급 ${formatWon(
+    hourlyRate
+  )}`;
+}
+
+function renderBonusHoursEmpty() {
+  dom.bonusHoursInput.value = "";
+  dom.bonusHoursInput.disabled = true;
+  dom.bonusPayPreview.textContent = "₩0";
+  dom.bonusPayFormula.textContent = "0시간 0분 × 시급 ₩0";
+}
+
+function renderStatementTotals(payroll) {
   dom.totalHoursCell.textContent = formatDurationText(payroll.totals.hours);
   dom.basePayCell.textContent = formatWon(payroll.totals.basePay);
   dom.allowanceCell.textContent = formatWon(payroll.totals.allowances);
+  dom.bonusPayCell.textContent = formatWon(payroll.totals.bonusPay);
   dom.grossPayCell.textContent = formatWon(payroll.totals.grossPay);
   dom.netPayCell.textContent = formatWon(payroll.totals.netPay);
 }
@@ -1593,6 +1637,7 @@ function renderTotalsEmpty() {
   dom.totalHoursCell.textContent = "0시간 0분";
   dom.basePayCell.textContent = "₩0";
   dom.allowanceCell.textContent = "₩0";
+  dom.bonusPayCell.textContent = "₩0";
   dom.grossPayCell.textContent = "₩0";
   dom.netPayCell.textContent = "₩0";
 }
@@ -1704,6 +1749,8 @@ function downloadSummaryExcel() {
     이름: row.name,
     근무시간: formatDurationText(row.payroll.totals.hours),
     "근무시간(시간)": round2(row.payroll.totals.hours),
+    "보너스 시간": round2(row.payroll.totals.bonusHours),
+    "보너스 지급액(원)": roundCurrency(row.payroll.totals.bonusPay),
     "급여 총계(원)": roundCurrency(row.payroll.totals.grossPay),
     "세후 급여(원)": roundCurrency(row.payroll.totals.netPay),
   }));
@@ -1711,11 +1758,13 @@ function downloadSummaryExcel() {
   const totals = rows.reduce(
     (acc, row) => {
       acc.hours += row.payroll.totals.hours;
+      acc.bonusHours += row.payroll.totals.bonusHours;
+      acc.bonusPay += row.payroll.totals.bonusPay;
       acc.gross += row.payroll.totals.grossPay;
       acc.net += row.payroll.totals.netPay;
       return acc;
     },
-    { hours: 0, gross: 0, net: 0 }
+    { hours: 0, bonusHours: 0, bonusPay: 0, gross: 0, net: 0 }
   );
   dataRows.push({
     번호: "",
@@ -1723,6 +1772,8 @@ function downloadSummaryExcel() {
     이름: "합계",
     근무시간: formatDurationText(totals.hours),
     "근무시간(시간)": round2(totals.hours),
+    "보너스 시간": round2(totals.bonusHours),
+    "보너스 지급액(원)": roundCurrency(totals.bonusPay),
     "급여 총계(원)": roundCurrency(totals.gross),
     "세후 급여(원)": roundCurrency(totals.net),
   });
@@ -1734,6 +1785,8 @@ function downloadSummaryExcel() {
     { wch: 16 },
     { wch: 14 },
     { wch: 14 },
+    { wch: 14 },
+    { wch: 18 },
     { wch: 16 },
     { wch: 16 },
   ];
@@ -4630,7 +4683,9 @@ function computeEmployeeMonthPayroll(name, month) {
 
   const weeklyHolidayPay = weeks.reduce((sum, week) => sum + week.weeklyHolidayPay, 0);
   const allowances = totals.overtimePremium + totals.nightPremium + totals.holidayPremium + weeklyHolidayPay;
-  const grossPay = totals.basePay + allowances;
+  const bonusHours = getBonusHours(name, month);
+  const bonusPay = roundCurrency(bonusHours * hourlyRate);
+  const grossPay = totals.basePay + allowances + bonusPay;
   const tax = grossPay * (Math.max(0, toNumber(state.settings.taxRate, 0)) / 100);
   const netPay = grossPay - tax;
 
@@ -4645,6 +4700,8 @@ function computeEmployeeMonthPayroll(name, month) {
       holidayPremium: roundCurrency(totals.holidayPremium),
       weeklyHolidayPay: roundCurrency(weeklyHolidayPay),
       allowances: roundCurrency(allowances),
+      bonusHours: round2(bonusHours),
+      bonusPay,
       grossPay: roundCurrency(grossPay),
       netPay: roundCurrency(netPay),
     },
@@ -5440,6 +5497,40 @@ function normalizeUiDrafts(value) {
   };
 }
 
+function normalizeBonusHours(value) {
+  const source = value && typeof value === "object" ? value : {};
+  const normalized = {};
+  Object.entries(source).forEach(([month, employees]) => {
+    if (!/^\d{4}-\d{2}$/.test(month) || !employees || typeof employees !== "object") return;
+    const monthValues = {};
+    Object.entries(employees).forEach(([name, hours]) => {
+      const employeeName = cleanText(name);
+      const numericHours = Math.max(0, round2(toNumber(hours, 0)));
+      if (employeeName && numericHours > 0) monthValues[employeeName] = numericHours;
+    });
+    if (Object.keys(monthValues).length) normalized[month] = monthValues;
+  });
+  return normalized;
+}
+
+function getBonusHours(name, month) {
+  return Math.max(0, round2(toNumber(state.bonusHours?.[month]?.[name], 0)));
+}
+
+function setBonusHours(name, month, hours) {
+  const employeeName = cleanText(name);
+  if (!employeeName || !/^\d{4}-\d{2}$/.test(month)) return;
+  const numericHours = Math.max(0, round2(toNumber(hours, 0)));
+  if (numericHours > 0) {
+    if (!state.bonusHours[month]) state.bonusHours[month] = {};
+    state.bonusHours[month][employeeName] = numericHours;
+    return;
+  }
+  if (!state.bonusHours[month]) return;
+  delete state.bonusHours[month][employeeName];
+  if (!Object.keys(state.bonusHours[month]).length) delete state.bonusHours[month];
+}
+
 function normalizeCareerLevels(list) {
   const source = Array.isArray(list) ? list : [];
   const mapped = source
@@ -5478,6 +5569,7 @@ function buildPersistPayload() {
     settings: state.settings,
     holidays: state.holidays,
     employeeSettings: state.employeeSettings,
+    bonusHours: state.bonusHours,
     entries: state.entries,
     selectedMonth: state.selectedMonth,
     selectedEmployee: state.selectedEmployee,
@@ -5535,11 +5627,13 @@ function buildOutputsSnapshot() {
         acc.hours += item.totals.hours;
         acc.basePay += item.totals.basePay;
         acc.allowances += item.totals.allowances;
+        acc.bonusHours += item.totals.bonusHours;
+        acc.bonusPay += item.totals.bonusPay;
         acc.gross += item.totals.grossPay;
         acc.net += item.totals.netPay;
         return acc;
       },
-      { hours: 0, basePay: 0, allowances: 0, gross: 0, net: 0 }
+      { hours: 0, basePay: 0, allowances: 0, bonusHours: 0, bonusPay: 0, gross: 0, net: 0 }
     );
 
     return {
@@ -5550,6 +5644,8 @@ function buildOutputsSnapshot() {
         hours: round2(totals.hours),
         basePay: roundCurrency(totals.basePay),
         allowances: roundCurrency(totals.allowances),
+        bonusHours: round2(totals.bonusHours),
+        bonusPay: roundCurrency(totals.bonusPay),
         grossPay: roundCurrency(totals.gross),
         netPay: roundCurrency(totals.net),
       },
@@ -5644,6 +5740,7 @@ function restoreFromImportedData(data) {
   state.holidays = sanitizeHolidayList(Array.isArray(data.holidays) ? data.holidays : []);
   state.employeeSettings =
     data.employeeSettings && typeof data.employeeSettings === "object" ? data.employeeSettings : {};
+  state.bonusHours = normalizeBonusHours(data.bonusHours || {});
   state.entries = normalizePersistedEntries(Array.isArray(data.entries) ? data.entries : []);
   state.selectedMonth = cleanText(data.selectedMonth || "");
   state.selectedEmployee = cleanText(data.selectedEmployee || "");
