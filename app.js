@@ -554,7 +554,7 @@ async function parseWorkEntries(file) {
     throw new Error("엑셀에 데이터가 없습니다.");
   }
 
-  const headerMap = buildHeaderMap(rows[0]);
+  const headerMap = buildHeaderMap(rows[0], rows);
   if (!headerMap.name || !headerMap.date) {
     throw new Error("헤더를 찾지 못했습니다. '영업일자', '이름' 컬럼이 필요합니다.");
   }
@@ -567,13 +567,54 @@ async function parseWorkEntries(file) {
   return parsed;
 }
 
-function buildHeaderMap(firstRow) {
+function buildHeaderMap(firstRow, rows = []) {
   const keys = Object.keys(firstRow || {});
   const map = {};
   Object.entries(HEADER_CANDIDATES).forEach(([field, candidates]) => {
     map[field] = findHeaderKey(keys, candidates);
   });
+  // 일부 조회 결과 파일은 첫 번째 헤더 셀의 이름이 바뀌거나 유실되어도
+  // 그 아래에는 정상적인 영업일자 값이 들어 있습니다. 날짜만 들어 있는
+  // 열을 찾아 영업일자 열로 복구하되, 등원/하원 시각 열은 제외합니다.
+  if (!map.date) {
+    map.date = inferDateHeaderKey(keys, rows, Object.values(map).filter(Boolean));
+  }
   return map;
+}
+
+function inferDateHeaderKey(keys, rows, excludedKeys = []) {
+  const excluded = new Set(excludedKeys);
+  let bestKey = "";
+  let bestScore = 0;
+
+  keys.forEach((key) => {
+    if (excluded.has(key)) return;
+    const values = rows
+      .slice(0, 100)
+      .map((row) => row[key])
+      .filter((value) => value !== "" && value !== null && value !== undefined);
+    if (!values.length) return;
+
+    const matches = values.filter(isDateOnlyExcelValue).length;
+    const score = matches / values.length;
+    if (matches >= Math.min(2, values.length) && score >= 0.6 && score > bestScore) {
+      bestKey = key;
+      bestScore = score;
+    }
+  });
+
+  return bestKey;
+}
+
+function isDateOnlyExcelValue(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.getHours() === 0 && value.getMinutes() === 0 && value.getSeconds() === 0;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value) && value >= 20000 && value <= 80000;
+  }
+  if (typeof value !== "string") return false;
+  return /^\d{4}[.\-/]\d{1,2}[.\-/]\d{1,2}$/.test(value.trim());
 }
 
 function findHeaderKey(keys, candidates) {
