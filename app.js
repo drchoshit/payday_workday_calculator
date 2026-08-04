@@ -939,8 +939,6 @@ function handleEmployeeSettingAction(event) {
 function updateEmployeeCategory(name, category) {
   const nextCategory = normalizeEmployeeCategory(category);
   const config = ensureEmployeeSetting(name);
-  const previousCategory = getEmployeeCategory(name);
-  if (nextCategory === normalizeEmployeeCategory(previousCategory)) return;
 
   config.category = nextCategory;
   if (!state.entries.some((entry) => entry.name === name)) {
@@ -4201,12 +4199,14 @@ function getManagerNames() {
       if (!excluded.has(entry.name)) names.add(entry.name);
     });
   }
-  return Array.from(names).sort((a, b) => a.localeCompare(b, "ko-KR"));
+  return Array.from(names)
+    .filter((name) => isEmployeeManager(name))
+    .sort((a, b) => a.localeCompare(b, "ko-KR"));
 }
 
 function hasManagerCareerData(name) {
   const key = cleanText(name);
-  if (!key) return false;
+  if (!key || !isEmployeeManager(key)) return false;
   if (state.managerProfiles?.[key]) return true;
   if (state.entries.some((entry) => entry.name === key && isManagerCategory(entry.category))) return true;
   if (state.scheduleFixedRules.some((rule) => rule.manager === key)) return true;
@@ -4217,6 +4217,10 @@ function hasManagerCareerData(name) {
 
 function isManagerCategory(category) {
   return /관리/.test(cleanText(category));
+}
+
+function isEmployeeManager(name) {
+  return isManagerCategory(getEmployeeCategory(name));
 }
 
 function stripManagerTitle(name) {
@@ -4609,7 +4613,7 @@ function formatPromotionRemaining(snapshot) {
 }
 
 function syncCareerRatesToEmployeeSettings() {
-  const managers = getManagerNames();
+  const managers = getManagerNames().filter((name) => isEmployeeManager(name));
   if (!managers.length) return false;
   const refMonth = state.careerMonth || state.scheduleMonth || state.selectedMonth;
   let changed = false;
@@ -4626,7 +4630,7 @@ function syncCareerRatesToEmployeeSettings() {
 
 function getEffectiveHourlyRate(name, month) {
   const config = ensureEmployeeSetting(name);
-  if (hasManagerCareerData(name)) {
+  if (isEmployeeManager(name) && hasManagerCareerData(name)) {
     const snapshot = computeManagerCareerSnapshot(name, month);
     return Math.max(0, roundCurrency(snapshot.appliedWage));
   }
@@ -4868,11 +4872,11 @@ function getMostUsedCategory(name) {
 }
 
 function getEmployeeCategory(name) {
-  const entryCategory = getMostUsedCategory(name);
-  if (entryCategory) return entryCategory;
-
   const settingCategory = cleanText(state.employeeSettings[name]?.category);
   if (settingCategory) return settingCategory;
+
+  const entryCategory = getMostUsedCategory(name);
+  if (entryCategory) return entryCategory;
 
   if (state.managerProfiles[name]) return "관리자";
   return "";
@@ -4883,6 +4887,9 @@ function normalizeEmployeeCategory(category) {
 }
 
 function getMostUsedCategoryInMonth(name, month) {
+  const settingCategory = cleanText(state.employeeSettings[name]?.category);
+  if (settingCategory) return normalizeEmployeeCategory(settingCategory);
+
   const counts = new Map();
   state.entries
     .filter((entry) => entry.name === name && entry.category && (!month || entry.workDate.startsWith(month)))
