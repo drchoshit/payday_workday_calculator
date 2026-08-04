@@ -345,6 +345,9 @@
                   <span>근무자 선택</span>
                   <select id="statementEmployeeSelect"></select>
                 </label>
+                <button id="bonusHoursToggleBtn" class="btn secondary" type="button">
+                  보너스 입력
+                </button>
                 <button id="printStatementBtn" class="btn secondary" type="button">
                   인쇄
                 </button>
@@ -383,7 +386,7 @@
             </div>
           </div>
 
-          <article class="card statement-bonus-card">
+          <article id="statementBonusCard" class="card statement-bonus-card" hidden>
             <div class="card-head">
               <h2>보너스 시간</h2>
             </div>
@@ -436,7 +439,7 @@
                   <div><span>근무시간 합계</span><strong id="totalHoursCell">0.00시간</strong></div>
                   <div><span>기본급 합계</span><strong id="basePayCell">₩0</strong></div>
                   <div><span>수당 합계</span><strong id="allowanceCell">₩0</strong></div>
-                  <div><span>보너스 지급</span><strong id="bonusPayCell">₩0</strong></div>
+                  <div id="bonusPayRow" hidden><span>보너스 지급</span><strong id="bonusPayCell">₩0</strong></div>
                   <div><span>급여 총계</span><strong id="grossPayCell">₩0</strong></div>
                   <div><span>세후 급여</span><strong id="netPayCell">₩0</strong></div>
                 </div>
