@@ -383,6 +383,24 @@
             </div>
           </div>
 
+          <article class="card statement-bonus-card">
+            <div class="card-head">
+              <h2>보너스 시간</h2>
+            </div>
+            <div class="card-body bonus-hours-panel">
+              <label class="field bonus-hours-field">
+                <span>추가 시간</span>
+                <input id="bonusHoursInput" type="number" min="0" step="0.1" placeholder="예: 2.5" />
+              </label>
+              <div class="bonus-pay-preview">
+                <span>추가 지급액</span>
+                <strong id="bonusPayPreview">₩0</strong>
+                <small id="bonusPayFormula">0시간 × 시급 ₩0</small>
+              </div>
+              <p class="hint">선택한 월과 근무자에게만 저장되며 급여 총계와 세후 급여에 반영됩니다.</p>
+            </div>
+          </article>
+
           <div class="grid two">
             <article class="card">
               <div class="card-head">
@@ -418,6 +436,7 @@
                   <div><span>근무시간 합계</span><strong id="totalHoursCell">0.00시간</strong></div>
                   <div><span>기본급 합계</span><strong id="basePayCell">₩0</strong></div>
                   <div><span>수당 합계</span><strong id="allowanceCell">₩0</strong></div>
+                  <div><span>보너스 지급</span><strong id="bonusPayCell">₩0</strong></div>
                   <div><span>급여 총계</span><strong id="grossPayCell">₩0</strong></div>
                   <div><span>세후 급여</span><strong id="netPayCell">₩0</strong></div>
                 </div>

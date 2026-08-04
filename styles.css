@@ -1633,6 +1633,59 @@ select:focus {
   min-width: 280px;
 }
 
+.statement-bonus-card {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.bonus-hours-panel {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(220px, 1fr);
+  align-items: end;
+  gap: 12px 18px;
+}
+
+.bonus-hours-field input {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.bonus-pay-preview {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 3px 12px;
+  min-height: 44px;
+  background: var(--surface-soft);
+  border: 1px solid #d8e4ff;
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+.bonus-pay-preview span,
+.bonus-pay-preview small {
+  color: var(--ink-700);
+}
+
+.bonus-pay-preview span {
+  font-size: 13px;
+}
+
+.bonus-pay-preview strong {
+  justify-self: end;
+  font-size: 17px;
+}
+
+.bonus-pay-preview small {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
+.bonus-hours-panel > .hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .badge {
   display: inline-block;
   font-size: 12px;
@@ -1717,6 +1770,10 @@ select:focus {
 }
 
 @media (max-width: 720px) {
+  .bonus-hours-panel {
+    grid-template-columns: 1fr;
+  }
+
   .app-shell {
     padding: 16px 12px 26px;
   }
