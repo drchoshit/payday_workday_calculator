@@ -1,4 +1,5 @@
 const STORAGE_KEY = "payroll-app-config-v1";
+const DEPLOYMENT_BACKUP_KEY = "payroll-app-config-v1-backup-20260829";
 const EXPORT_APP_ID = "payroll-auto-settlement";
 const EXPORT_VERSION = 1;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -2312,11 +2313,11 @@ function buildManagerBasicCard(name) {
           <div class="manager-basic-fields">
             <label class="field">
               <span>최대 주당 T</span>
-              <input class="schedule-manager-desired" aria-label="${escapeHtml(
+              <input class="schedule-manager-weekly-maximum" aria-label="${escapeHtml(
                 displayName
               )} 최대 주당 T" data-name="${escapeHtml(
                 name
-              )}" type="number" min="0" step="1" value="${toNumber(profile.desiredShifts, 0)}" />
+              )}" type="number" min="0" max="7" step="1" value="${getManagerWeeklyMaximum(name)}" />
             </label>
             <label class="field">
               <span>우선순위</span>
@@ -2505,12 +2506,11 @@ function handleScheduleManagerInput(event) {
   if (!name) return;
   const profile = ensureManagerProfile(name);
 
-  if (target.classList.contains("schedule-manager-desired")) {
-    profile.desiredShifts = Math.max(0, toNumber(target.value, 0));
-  }
   if (target.classList.contains("schedule-manager-weekly-maximum")) {
     profile.weeklyMaximumShifts = Math.max(0, Math.min(7, Math.round(toNumber(target.value, 0))));
     profile.weeklyDesiredShifts = profile.weeklyMaximumShifts;
+    profile.desiredShifts = profile.weeklyMaximumShifts;
+    syncManagerWeeklyMaximumInputs(name, profile.weeklyMaximumShifts, target);
     if (event.type === "change") target.value = String(profile.weeklyMaximumShifts);
   }
   if (target.classList.contains("schedule-fixed-preference-enabled")) {
@@ -2585,6 +2585,13 @@ function handleScheduleManagerInput(event) {
   }
 
   persistConfig();
+}
+
+function syncManagerWeeklyMaximumInputs(name, value, sourceInput) {
+  document.querySelectorAll(".schedule-manager-weekly-maximum").forEach((input) => {
+    if (!(input instanceof HTMLInputElement) || input === sourceInput) return;
+    if (input.dataset.name === name) input.value = String(value);
+  });
 }
 
 function handleScheduleManagerAction(event) {
@@ -2841,14 +2848,10 @@ function buildAutoScheduleForMonth(month, managers, options = {}) {
     return buildWeeklyFixedScheduleForMonth(month, managers);
   }
   const assignmentMap = createManagerAssignmentMap(managers);
-  const existingRows = getScheduleRowsForMonth(month);
-  const workerSlotMap = new Map(
-    existingRows.map((row) => [buildScheduleSlotKey(row.date, row.shiftId), toNumber(row.workerSlots, 1)])
-  );
   const slots = buildAutoScheduleSlots(month, options);
   const rows = [];
 
-  slots.forEach(({ dateKey, weekday, template }) => {
+  slots.forEach(({ dateKey, weekday, template, workerSlots }) => {
     const fixedRule = findFixedRule(dateKey, weekday, template.id);
     const fixedManager =
       fixedRule?.manager &&
@@ -2858,10 +2861,6 @@ function buildAutoScheduleForMonth(month, managers, options = {}) {
         ? fixedRule.manager
         : "";
     const fixedApplied = Boolean(fixedManager);
-    const workerSlots = Math.min(
-      2,
-      Math.max(1, Math.round(toNumber(workerSlotMap.get(buildScheduleSlotKey(dateKey, template.id)), 1)))
-    );
     let manager = fixedManager;
     let secondaryManager = "";
 
@@ -3170,7 +3169,8 @@ function buildAutoScheduleSlots(month, options = {}) {
     if (!date) return;
     const weekday = date.getDay();
     state.scheduleTemplates.forEach((template) => {
-      slots.push({ dateKey, weekday, template });
+      const workerSlots = getWeeklyHeadcount(weekday, template.id);
+      if (workerSlots > 0) slots.push({ dateKey, weekday, template, workerSlots });
     });
   });
 
@@ -3325,10 +3325,10 @@ function pickAutoManager(
     const assignedWeekB = getWeeklyAssignmentUnits(assignmentMap, b, weekKey);
     const fixedOnlyA = Boolean(profileA.fixedPreference.enabled);
     const fixedOnlyB = Boolean(profileB.fixedPreference.enabled);
-    const desiredA = fixedOnlyA ? 0 : toNumber(profileA.desiredShifts, 0);
-    const desiredB = fixedOnlyB ? 0 : toNumber(profileB.desiredShifts, 0);
-    const remainA = desiredA > 0 ? desiredA - assignedWeekA : 0;
-    const remainB = desiredB > 0 ? desiredB - assignedWeekB : 0;
+    const weeklyMaximumA = getManagerWeeklyMaximum(a);
+    const weeklyMaximumB = getManagerWeeklyMaximum(b);
+    const remainA = weeklyMaximumA - assignedWeekA;
+    const remainB = weeklyMaximumB - assignedWeekB;
     const fixedRemainA = getFixedPreferenceRemainingMinimum(
       profileA,
       assignmentMap,
@@ -3346,15 +3346,17 @@ function pickAutoManager(
       shiftId
     );
 
+    const prioritySlotA = isManagerPrioritySlot(a, weekday, shiftId);
+    const prioritySlotB = isManagerPrioritySlot(b, weekday, shiftId);
+    if (prioritySlotA !== prioritySlotB) return prioritySlotA ? -1 : 1;
+
     if (fixedRemainA !== fixedRemainB) return fixedRemainB - fixedRemainA;
 
     const priorityA = fixedOnlyA ? 999 : toNumber(profileA.priority, 999);
     const priorityB = fixedOnlyB ? 999 : toNumber(profileB.priority, 999);
     if (mode === "maximum") {
-      const capacityA = desiredA > 0 ? remainA : 999;
-      const capacityB = desiredB > 0 ? remainB : 999;
       if (priorityA !== priorityB) return priorityA - priorityB;
-      if (capacityA !== capacityB) return capacityB - capacityA;
+      if (remainA !== remainB) return remainB - remainA;
       if (assignedA !== assignedB) return assignedB - assignedA;
       return a.localeCompare(b, "ko-KR");
     }
@@ -3384,6 +3386,10 @@ function getFixedPreferenceRemainingMinimum(profile, assignmentMap, name, weekKe
 function isWithinAutoScheduleLimits(name, dateKey, weekday, shiftId, assignmentMap) {
   const profile = ensureManagerProfile(name);
   const weekKey = getScheduleWeekKey(dateKey);
+  const weeklyAssigned = getWeeklyAssignmentUnits(assignmentMap, name, weekKey);
+  const weeklyMaximum = getManagerWeeklyMaximum(name);
+  if (weeklyMaximum <= 0 || weeklyAssigned >= weeklyMaximum) return false;
+
   const preference = profile.fixedPreference;
   if (preference.enabled) {
     if (!preference.weekdays.includes(weekday)) return false;
@@ -3391,14 +3397,12 @@ function isWithinAutoScheduleLimits(name, dateKey, weekday, shiftId, assignmentM
     if (!range || toNumber(range.max, 0) <= 0) return false;
     return getWeeklyShiftAssignmentUnits(assignmentMap, name, weekKey, shiftId) < toNumber(range.max, 0);
   }
-
-  const weeklyAssigned = getWeeklyAssignmentUnits(assignmentMap, name, weekKey);
-  const weeklyMaximum = toNumber(profile.desiredShifts, 0);
-  return weeklyMaximum <= 0 || weeklyAssigned < weeklyMaximum;
+  return true;
 }
 
 function isManagerAvailable(name, dateKey, weekday, shiftId) {
   const profile = ensureManagerProfile(name);
+  if (isDateInUnavailableRanges(dateKey, profile.unavailableRanges)) return false;
   const preference = profile.fixedPreference;
   if (preference.enabled) {
     return (
@@ -3407,7 +3411,7 @@ function isManagerAvailable(name, dateKey, weekday, shiftId) {
     );
   }
   ensureManagerProfileAvailability(profile, weekday);
-  return Boolean(profile.availability?.[weekday]?.[shiftId]) && !isDateInUnavailableRanges(dateKey, profile.unavailableRanges);
+  return Boolean(profile.availability?.[weekday]?.[shiftId]);
 }
 
 function renderScheduleResultTable() {
@@ -4100,13 +4104,14 @@ function ensureManagerProfile(name) {
     state.managerProfiles[key] = createDefaultManagerProfile();
   }
   const profile = state.managerProfiles[key];
-  profile.desiredShifts = Math.max(0, toNumber(profile.desiredShifts, 0));
-  const weeklyMaximumSource = profile.weeklyMaximumShifts ?? profile.weeklyDesiredShifts;
+  const weeklyMaximumSource =
+    profile.weeklyMaximumShifts ?? profile.weeklyDesiredShifts ?? profile.desiredShifts;
   profile.weeklyMaximumShifts = Math.max(
     0,
     Math.min(7, Math.round(toNumber(weeklyMaximumSource, 0)))
   );
   profile.weeklyDesiredShifts = profile.weeklyMaximumShifts;
+  profile.desiredShifts = profile.weeklyMaximumShifts;
   profile.prioritySlots = normalizePrioritySlots(profile.prioritySlots);
   profile.priority = Math.max(1, Math.round(toNumber(profile.priority, 5)));
   profile.pointPerShift = Math.min(3, Math.max(1, round2(toNumber(profile.pointPerShift, 1))));
@@ -5467,22 +5472,22 @@ function normalizeManagerProfiles(value) {
         : MANAGER_BASE_MODES.HOURS;
     const derivedBasePoints = rawBasePoints > 0 ? rawBasePoints : round2(rawBaseHours * pointPerShift);
     const derivedBaseHours = rawBaseHours > 0 ? rawBaseHours : round2(rawBasePoints / pointPerShift);
+    const weeklyMaximumShifts = Math.max(
+      0,
+      Math.min(
+        7,
+        Math.round(
+          toNumber(
+            raw?.weeklyMaximumShifts ?? raw?.weeklyDesiredShifts ?? raw?.desiredShifts,
+            base.weeklyMaximumShifts
+          )
+        )
+      )
+    );
     const profile = {
-      desiredShifts: Math.max(0, toNumber(raw?.desiredShifts, base.desiredShifts)),
-      weeklyMaximumShifts: Math.max(
-        0,
-        Math.min(
-          7,
-          Math.round(toNumber(raw?.weeklyMaximumShifts ?? raw?.weeklyDesiredShifts, base.weeklyMaximumShifts))
-        )
-      ),
-      weeklyDesiredShifts: Math.max(
-        0,
-        Math.min(
-          7,
-          Math.round(toNumber(raw?.weeklyMaximumShifts ?? raw?.weeklyDesiredShifts, base.weeklyMaximumShifts))
-        )
-      ),
+      desiredShifts: weeklyMaximumShifts,
+      weeklyMaximumShifts,
+      weeklyDesiredShifts: weeklyMaximumShifts,
       priority: Math.max(1, Math.round(toNumber(raw?.priority, base.priority))),
       pointPerShift,
       baseMode,
@@ -5832,6 +5837,13 @@ function persistConfig() {
 function loadPersistedConfig() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return {};
+  try {
+    if (!localStorage.getItem(DEPLOYMENT_BACKUP_KEY)) {
+      localStorage.setItem(DEPLOYMENT_BACKUP_KEY, raw);
+    }
+  } catch {
+    // A full or restricted storage area must not prevent the primary data from loading.
+  }
   try {
     return JSON.parse(raw);
   } catch {
