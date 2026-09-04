@@ -1,5 +1,5 @@
 const STORAGE_KEY = "payroll-app-config-v1";
-const DEPLOYMENT_BACKUP_KEY = "payroll-app-config-v1-backup-20260829";
+const DEPLOYMENT_BACKUP_KEY = "payroll-app-config-v1-backup-20260904";
 const EXPORT_APP_ID = "payroll-auto-settlement";
 const EXPORT_VERSION = 1;
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
@@ -33,6 +33,7 @@ const SHIFT_IDS = ["1T", "2T", "3T"];
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const MIN_AUTO_SCHEDULE_MONTH = "2026-05";
 const SHIFT_UNIT_HOURS = 8;
+const HALF_SHIFT_RULE_START_MONTH = "2026-09";
 const MANAGER_BASE_MODES = {
   HOURS: "hours",
   POINTS: "points",
@@ -64,6 +65,7 @@ const state = {
   entries: normalizePersistedEntries(persisted.entries || []),
   selectedMonth: cleanText(persisted.selectedMonth || ""),
   selectedEmployee: cleanText(persisted.selectedEmployee || ""),
+  statementCategory: normalizeStatementCategory(persisted.statementCategory),
   summaryCategory: cleanText(persisted.summaryCategory || "all") || "all",
   scheduleMonth: cleanText(persisted.scheduleMonth || ""),
   scheduleTemplates: normalizeScheduleTemplates(persisted.scheduleTemplates || []),
@@ -127,6 +129,7 @@ const dom = {
   previewBody: document.getElementById("previewBody"),
 
   statementEmployeeSelect: document.getElementById("statementEmployeeSelect"),
+  statementCategorySelect: document.getElementById("statementCategorySelect"),
   printStatementBtn: document.getElementById("printStatementBtn"),
   statementMeta: document.getElementById("statementMeta"),
   statementCareerStats: document.getElementById("statementCareerStats"),
@@ -382,6 +385,14 @@ function bindEvents() {
     state.selectedEmployee = dom.statementEmployeeSelect.value;
     bonusEditorOpen = false;
     persistConfig();
+    renderStatement();
+  });
+  dom.statementCategorySelect.addEventListener("change", () => {
+    state.statementCategory = normalizeStatementCategory(dom.statementCategorySelect.value);
+    bonusEditorOpen = false;
+    ensureSelectedEmployeeForMonth();
+    persistConfig();
+    renderEmployeeSelectors();
     renderStatement();
   });
 
@@ -1024,10 +1035,7 @@ function renderEverything() {
     state.selectedMonth = months.slice(-1)[0] || "";
   }
 
-  const employeesInMonth = getEmployeesInMonth(state.selectedMonth);
-  if (!employeesInMonth.includes(state.selectedEmployee)) {
-    state.selectedEmployee = employeesInMonth[0] || "";
-  }
+  ensureSelectedEmployeeForMonth();
 
   syncEmployeeSettings();
   syncCareerRatesToEmployeeSettings();
@@ -1081,7 +1089,7 @@ function syncMonthSelectors() {
 }
 
 function ensureSelectedEmployeeForMonth() {
-  const employees = getEmployeesInMonth(state.selectedMonth);
+  const employees = getStatementEmployeesInMonth(state.selectedMonth);
   if (!employees.includes(state.selectedEmployee)) {
     state.selectedEmployee = employees[0] || "";
   }
@@ -1089,21 +1097,48 @@ function ensureSelectedEmployeeForMonth() {
 
 function renderEmployeeSelectors() {
   const employees = getEmployeesInMonth(state.selectedMonth);
+  const statementEmployees = getStatementEmployeesInMonth(state.selectedMonth);
   const placeholder = '<option value="">근무자 선택</option>';
   const newEmployeeOption = '<option value="__new__">+ 신규 근무자 추가</option>';
-  const optionHtml = employees
+  const missingOptionHtml = employees
     .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
     .join("");
+  const statementOptionHtml = ["관리자", "멘토"]
+    .map((category) => {
+      const options = statementEmployees
+        .filter((name) => getStatementEmployeeCategory(name) === category)
+        .map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        .join("");
+      return options ? `<optgroup label="${category}">${options}</optgroup>` : "";
+    })
+    .join("");
 
-  dom.statementEmployeeSelect.innerHTML = placeholder + optionHtml;
-  dom.missingEmployeeSelect.innerHTML = placeholder + newEmployeeOption + optionHtml;
+  dom.statementCategorySelect.value = state.statementCategory;
+  dom.statementEmployeeSelect.innerHTML = placeholder + statementOptionHtml;
+  dom.missingEmployeeSelect.innerHTML = placeholder + newEmployeeOption + missingOptionHtml;
 
-  if (employees.includes(state.selectedEmployee)) {
+  if (statementEmployees.includes(state.selectedEmployee)) {
     dom.statementEmployeeSelect.value = state.selectedEmployee;
   } else {
-    state.selectedEmployee = employees[0] || "";
+    state.selectedEmployee = statementEmployees[0] || "";
     dom.statementEmployeeSelect.value = state.selectedEmployee;
   }
+}
+
+function getStatementEmployeesInMonth(month) {
+  const employees = getEmployeesInMonth(month);
+  if (state.statementCategory === "all") return employees;
+  return employees.filter((name) => getStatementEmployeeCategory(name) === state.statementCategory);
+}
+
+function getStatementEmployeeCategory(name) {
+  const category = getMostUsedCategoryInMonth(name, state.selectedMonth) || getEmployeeCategory(name);
+  return isManagerCategory(category) ? "관리자" : "멘토";
+}
+
+function normalizeStatementCategory(value) {
+  const category = cleanText(value);
+  return category === "관리자" || category === "멘토" ? category : "all";
 }
 
 function renderEmployeeSettingsTable() {
@@ -4246,16 +4281,7 @@ function renderCareer() {
 }
 
 function renderCareerMonthOptions() {
-  const monthSet = new Set([
-    ...getAvailableMonths(),
-    ...Object.keys(state.scheduleAssignments || {}),
-    state.scheduleMonth,
-    state.selectedMonth,
-    state.careerMonth,
-  ]);
-  const months = Array.from(monthSet)
-    .filter((month) => /^\d{4}-\d{2}$/.test(month))
-    .sort();
+  const months = getCareerContributionMonths();
 
   if (!months.length) {
     dom.careerMonthSelect.innerHTML = '<option value="">월 선택</option>';
@@ -4380,7 +4406,7 @@ function handleCareerLevelAction(event) {
 function renderCareerManagerTable() {
   const managers = getManagerNames();
   if (!managers.length) {
-    dom.careerManagerBody.innerHTML = '<tr><td colspan="10" class="empty">관리자 데이터가 없습니다.</td></tr>';
+    dom.careerManagerBody.innerHTML = '<tr><td colspan="11" class="empty">관리자 데이터가 없습니다.</td></tr>';
     return;
   }
 
@@ -4408,6 +4434,9 @@ function renderCareerManagerTable() {
         <td><input class="career-manager-point" data-name="${escapeHtml(
           name
         )}" type="number" min="1" max="3" step="0.1" value="${toNumber(profile.pointPerShift, 1)}" /></td>
+        <td class="career-month-contribution">${formatShiftUnitText(
+          snapshot.monthlyShiftUnits
+        )} / ${formatPointText(snapshot.monthlyPoints)}</td>
         <td class="career-assigned-shifts">${formatShiftUnitText(snapshot.assignedShiftUnits)}</td>
         <td class="career-assigned-hours">${formatDurationText(snapshot.assignedHours)}</td>
         <td class="career-total-hours">${formatDurationText(snapshot.totalHours)}</td>
@@ -4469,6 +4498,9 @@ function updateCareerManagerComputedRow(name) {
 
   const snapshot = computeManagerCareerSnapshot(name, state.careerMonth);
   const cells = {
+    ".career-month-contribution": `${formatShiftUnitText(
+      snapshot.monthlyShiftUnits
+    )} / ${formatPointText(snapshot.monthlyPoints)}`,
     ".career-assigned-shifts": formatShiftUnitText(snapshot.assignedShiftUnits),
     ".career-assigned-hours": formatDurationText(snapshot.assignedHours),
     ".career-total-hours": formatDurationText(snapshot.totalHours),
@@ -4529,11 +4561,7 @@ function getManagerContributionForMonth(name, month) {
   if (!/^\d{4}-\d{2}$/.test(key)) {
     return { shiftUnits: 0, hours: 0 };
   }
-  const scheduled = getScheduledManagerContributionForMonth(name, key);
-  const contribution =
-    scheduled.shiftUnits > 0 || scheduled.hours > 0
-      ? scheduled
-      : getManagerPayrollContributionForMonth(name, key);
+  const contribution = getManagerPayrollContributionForMonth(name, key);
   return {
     shiftUnits: round1(contribution.shiftUnits),
     hours: round2(contribution.hours),
@@ -4542,11 +4570,7 @@ function getManagerContributionForMonth(name, month) {
 
 function getManagerContributionUpToMonth(name, limitMonth) {
   const result = { shiftUnits: 0, hours: 0 };
-  const months = Array.from(
-    new Set([...Object.keys(state.scheduleAssignments || {}), ...getAvailableMonths()])
-  )
-    .filter((month) => /^\d{4}-\d{2}$/.test(month))
-    .sort();
+  const months = getCareerContributionMonths();
 
   months.forEach((month) => {
     if (limitMonth && month > limitMonth) return;
@@ -4574,18 +4598,36 @@ function getScheduledManagerContributionForMonth(name, month) {
 
 function getManagerPayrollContributionForMonth(name, month) {
   const entries = state.entries.filter((entry) => entry.name === name && entry.workDate.startsWith(month));
-  const contribution = entries.reduce(
-    (acc, entry) => {
-      const hours = Math.max(0, toNumber(entry.adjustedHours, 0));
-      if (hours <= 0) return acc;
-      acc.hours += hours;
-      return acc;
-    },
-    { shiftUnits: 0, hours: 0 }
-  );
-  contribution.shiftUnits = calculateShiftUnitsFromHours(contribution.hours);
-  contribution.hours = round2(contribution.hours);
-  return contribution;
+  const hoursByDate = new Map();
+  entries.forEach((entry) => {
+    const hours = Math.max(0, toNumber(entry.adjustedHours, 0));
+    if (hours <= 0) return;
+    hoursByDate.set(entry.workDate, (hoursByDate.get(entry.workDate) || 0) + hours);
+  });
+
+  let shiftUnits = 0;
+  let hours = 0;
+  hoursByDate.forEach((dailyHours) => {
+    hours += dailyHours;
+    if (month >= HALF_SHIFT_RULE_START_MONTH) {
+      shiftUnits += calculateShiftUnitsForWorkDay(dailyHours);
+    }
+  });
+  if (month < HALF_SHIFT_RULE_START_MONTH) {
+    shiftUnits = calculateShiftUnitsFromHours(hours);
+  }
+  return { shiftUnits: round1(shiftUnits), hours: round2(hours) };
+}
+
+function getCareerContributionMonths() {
+  return Array.from(
+    new Set(
+      state.entries
+        .filter((entry) => isEmployeeManager(entry.name))
+        .map((entry) => entry.workDate.slice(0, 7))
+        .filter((month) => /^\d{4}-\d{2}$/.test(month))
+    )
+  ).sort();
 }
 
 function resolveCareerLevel(points) {
@@ -5254,6 +5296,12 @@ function round2(value) {
   return Math.round(toNumber(value, 0) * 100) / 100;
 }
 
+function calculateShiftUnitsForWorkDay(hours) {
+  const workedHours = Math.max(0, toNumber(hours, 0));
+  if (workedHours <= 0) return 0;
+  return workedHours < 5 ? 0.5 : 1;
+}
+
 function calculateShiftUnitsFromHours(hours) {
   return round1(Math.max(0, toNumber(hours, 0)) / SHIFT_UNIT_HOURS);
 }
@@ -5610,6 +5658,7 @@ function buildPersistPayload() {
     entries: state.entries,
     selectedMonth: state.selectedMonth,
     selectedEmployee: state.selectedEmployee,
+    statementCategory: state.statementCategory,
     summaryCategory: state.summaryCategory,
     scheduleMonth: state.scheduleMonth,
     scheduleTemplates: state.scheduleTemplates,
@@ -5781,6 +5830,7 @@ function restoreFromImportedData(data) {
   state.entries = normalizePersistedEntries(Array.isArray(data.entries) ? data.entries : []);
   state.selectedMonth = cleanText(data.selectedMonth || "");
   state.selectedEmployee = cleanText(data.selectedEmployee || "");
+  state.statementCategory = normalizeStatementCategory(data.statementCategory);
   state.summaryCategory = cleanText(data.summaryCategory || "all") || "all";
   state.scheduleMonth = cleanText(data.scheduleMonth || "");
   state.scheduleTemplates = normalizeScheduleTemplates(data.scheduleTemplates || []);

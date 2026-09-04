@@ -342,6 +342,14 @@
               <h2>근무자 정산서</h2>
               <div class="inline-fields">
                 <label class="field compact-field">
+                  <span>구분</span>
+                  <select id="statementCategorySelect">
+                    <option value="all">전체</option>
+                    <option value="관리자">관리자</option>
+                    <option value="멘토">멘토</option>
+                  </select>
+                </label>
+                <label class="field compact-field">
                   <span>근무자 선택</span>
                   <select id="statementEmployeeSelect"></select>
                 </label>
@@ -837,8 +845,9 @@
                     <th>이름</th>
                     <th>기본 누적 시간/P</th>
                     <th>1타임 P</th>
-                    <th>근무/배정 T(누적)</th>
-                    <th>근무/배정 시간(누적)</th>
+                    <th>선택 월 T/P</th>
+                    <th>실제 근무 T(누적)</th>
+                    <th>실제 근무시간(누적)</th>
                     <th>누적 시간 합계</th>
                     <th>누적 P 합계</th>
                     <th>현재 직급</th>
@@ -848,12 +857,14 @@
                 </thead>
                 <tbody id="careerManagerBody">
                   <tr>
-                    <td colspan="10" class="empty">관리자 데이터가 없습니다.</td>
+                    <td colspan="11" class="empty">관리자 데이터가 없습니다.</td>
                   </tr>
                 </tbody>
               </table>
               <p class="hint">
-                여기서 계산된 적용 시급은 `근무자 시급 / 야간 기준 설정`의 시급에 자동 반영됩니다.
+                관리자 누적은 완료된 실제 근무기록만 반영합니다. 2026년 8월까지는 기존 방식(월 근무시간 ÷ 8)을 유지하고,
+                2026년 9월부터 하루 5시간 미만은 0.5T, 5시간 이상은 1T로 계산합니다.
+                미래 배정표는 누적 및 승진 계산에 포함하지 않습니다. 여기서 계산된 적용 시급은 `근무자 시급 / 야간 기준 설정`의 시급에 자동 반영됩니다.
               </p>
             </div>
           </article>
