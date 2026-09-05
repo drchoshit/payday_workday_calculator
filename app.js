@@ -135,6 +135,7 @@ const dom = {
   statementCareerStats: document.getElementById("statementCareerStats"),
   statementBody: document.getElementById("statementBody"),
   weeklySummaryBody: document.getElementById("weeklySummaryBody"),
+  weeklySummaryTitle: document.getElementById("weeklySummaryTitle"),
   weeklyBasePayHeader: document.getElementById("weeklyBasePayHeader"),
   weeklyAllowanceHeader: document.getElementById("weeklyAllowanceHeader"),
   allowanceRow: document.getElementById("allowanceRow"),
@@ -1527,6 +1528,9 @@ function renderPreview() {
 }
 
 function renderStatement() {
+  dom.weeklySummaryTitle.textContent = state.selectedEmployee
+    ? `주차별 급여(${state.selectedEmployee} ${getStatementEmployeeCategory(state.selectedEmployee)})`
+    : "주차별 급여";
   const isMentor = Boolean(state.selectedEmployee) && getStatementEmployeeCategory(state.selectedEmployee) === "멘토";
   dom.weeklyBasePayHeader.hidden = isMentor;
   dom.weeklyAllowanceHeader.hidden = isMentor;
