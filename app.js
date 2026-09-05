@@ -135,6 +135,9 @@ const dom = {
   statementCareerStats: document.getElementById("statementCareerStats"),
   statementBody: document.getElementById("statementBody"),
   weeklySummaryBody: document.getElementById("weeklySummaryBody"),
+  weeklyBasePayHeader: document.getElementById("weeklyBasePayHeader"),
+  weeklyAllowanceHeader: document.getElementById("weeklyAllowanceHeader"),
+  allowanceRow: document.getElementById("allowanceRow"),
   statementBonusCard: document.getElementById("statementBonusCard"),
   bonusHoursToggleBtn: document.getElementById("bonusHoursToggleBtn"),
   bonusHoursInput: document.getElementById("bonusHoursInput"),
@@ -1524,12 +1527,17 @@ function renderPreview() {
 }
 
 function renderStatement() {
+  const isMentor = Boolean(state.selectedEmployee) && getStatementEmployeeCategory(state.selectedEmployee) === "멘토";
+  dom.weeklyBasePayHeader.hidden = isMentor;
+  dom.weeklyAllowanceHeader.hidden = isMentor;
+  dom.allowanceRow.hidden = isMentor;
+  const emptyWeeklyRow = `<tr><td colspan="${isMentor ? 4 : 6}" class="empty">데이터가 없습니다.</td></tr>`;
   if (!state.selectedMonth || !state.selectedEmployee) {
     dom.statementMeta.textContent = "근무자와 정산 월을 선택하세요.";
     renderStatementCareerStats("", "");
     dom.statementBody.innerHTML =
       '<tr><td colspan="12" class="empty">표시할 근무 내역이 없습니다.</td></tr>';
-    dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
+    dom.weeklySummaryBody.innerHTML = emptyWeeklyRow;
     renderBonusHoursEmpty();
     renderTotalsEmpty();
     return;
@@ -1547,7 +1555,7 @@ function renderStatement() {
   if (!payroll.shifts.length) {
     dom.statementBody.innerHTML =
       '<tr><td colspan="12" class="empty">선택한 월의 근무기록이 없습니다.</td></tr>';
-    dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
+    dom.weeklySummaryBody.innerHTML = emptyWeeklyRow;
     renderStatementTotals(payroll);
     return;
   }
@@ -1576,7 +1584,7 @@ function renderStatement() {
     .join("");
 
   if (!payroll.weeks.length) {
-    dom.weeklySummaryBody.innerHTML = '<tr><td colspan="6" class="empty">데이터가 없습니다.</td></tr>';
+    dom.weeklySummaryBody.innerHTML = emptyWeeklyRow;
   } else {
     dom.weeklySummaryBody.innerHTML = payroll.weeks
       .map((week) => {
@@ -1586,8 +1594,7 @@ function renderStatement() {
           <td>${week.weekIndex}주차</td>
           <td>${formatDurationText(week.hours)}</td>
           <td>${week.workDays}</td>
-          <td>${formatWon(week.basePay)}</td>
-          <td>${formatWon(premiumSum)}</td>
+          ${isMentor ? "" : `<td>${formatWon(week.basePay)}</td><td>${formatWon(premiumSum)}</td>`}
           <td>${formatWon(week.totalPay)}</td>
         </tr>`;
       })
