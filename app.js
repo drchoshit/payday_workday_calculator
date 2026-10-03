@@ -156,6 +156,7 @@ const dom = {
   summaryMeta: document.getElementById("summaryMeta"),
   summaryCategorySelect: document.getElementById("summaryCategorySelect"),
   summaryTotalHours: document.getElementById("summaryTotalHours"),
+  summaryTotalBonusHours: document.getElementById("summaryTotalBonusHours"),
   summaryTotalGross: document.getElementById("summaryTotalGross"),
   summaryTotalNet: document.getElementById("summaryTotalNet"),
   monthlyArchiveBody: document.getElementById("monthlyArchiveBody"),
@@ -1717,8 +1718,9 @@ function renderSummary() {
 
   if (!state.selectedMonth) {
     dom.summaryMeta.textContent = "요약할 월을 선택하세요.";
-    dom.summaryBody.innerHTML = '<tr><td colspan="4" class="empty">정산할 데이터가 없습니다.</td></tr>';
+    dom.summaryBody.innerHTML = '<tr><td colspan="5" class="empty">정산할 데이터가 없습니다.</td></tr>';
     dom.summaryTotalHours.textContent = "0시간 0분";
+    dom.summaryTotalBonusHours.textContent = "0시간 0분";
     dom.summaryTotalGross.textContent = "₩0";
     dom.summaryTotalNet.textContent = "₩0";
     return;
@@ -1728,8 +1730,9 @@ function renderSummary() {
   const categoryLabel = getSummaryCategoryLabel(state.summaryCategory);
   dom.summaryMeta.textContent = `${formatMonthLabel(state.selectedMonth)} 기준 ${categoryLabel} 급여 요약`;
   if (!rows.length) {
-    dom.summaryBody.innerHTML = '<tr><td colspan="4" class="empty">정산할 데이터가 없습니다.</td></tr>';
+    dom.summaryBody.innerHTML = '<tr><td colspan="5" class="empty">정산할 데이터가 없습니다.</td></tr>';
     dom.summaryTotalHours.textContent = "0시간 0분";
+    dom.summaryTotalBonusHours.textContent = "0시간 0분";
     dom.summaryTotalGross.textContent = "₩0";
     dom.summaryTotalNet.textContent = "₩0";
     return;
@@ -1740,6 +1743,7 @@ function renderSummary() {
       ({ name, payroll }) => `<tr>
       <td>${escapeHtml(name)}</td>
       <td>${formatDurationText(payroll.totals.hours)}</td>
+      <td>${formatDurationText(payroll.totals.bonusHours)}</td>
       <td>${formatWon(payroll.totals.grossPay)}</td>
       <td>${formatWon(payroll.totals.netPay)}</td>
     </tr>`
@@ -1749,14 +1753,16 @@ function renderSummary() {
   const totals = rows.reduce(
     (acc, item) => {
       acc.hours += item.payroll.totals.hours;
+      acc.bonusHours += item.payroll.totals.bonusHours;
       acc.gross += item.payroll.totals.grossPay;
       acc.net += item.payroll.totals.netPay;
       return acc;
     },
-    { hours: 0, gross: 0, net: 0 }
+    { hours: 0, bonusHours: 0, gross: 0, net: 0 }
   );
 
   dom.summaryTotalHours.textContent = formatDurationText(totals.hours);
+  dom.summaryTotalBonusHours.textContent = formatDurationText(totals.bonusHours);
   dom.summaryTotalGross.textContent = formatWon(totals.gross);
   dom.summaryTotalNet.textContent = formatWon(totals.net);
 }
@@ -1817,8 +1823,8 @@ function downloadSummaryExcel() {
     번호: index + 1,
     직급: row.category || "-",
     이름: row.name,
-    근무시간: formatDurationText(row.payroll.totals.hours),
-    "근무시간(시간)": round2(row.payroll.totals.hours),
+    "실제 근무시간": formatDurationText(row.payroll.totals.hours),
+    "실제 근무시간(시간)": round2(row.payroll.totals.hours),
     "보너스 시간": round2(row.payroll.totals.bonusHours),
     "보너스 지급액(원)": roundCurrency(row.payroll.totals.bonusPay),
     "급여 총계(원)": roundCurrency(row.payroll.totals.grossPay),
@@ -1840,8 +1846,8 @@ function downloadSummaryExcel() {
     번호: "",
     직급: "",
     이름: "합계",
-    근무시간: formatDurationText(totals.hours),
-    "근무시간(시간)": round2(totals.hours),
+    "실제 근무시간": formatDurationText(totals.hours),
+    "실제 근무시간(시간)": round2(totals.hours),
     "보너스 시간": round2(totals.bonusHours),
     "보너스 지급액(원)": roundCurrency(totals.bonusPay),
     "급여 총계(원)": roundCurrency(totals.gross),
@@ -1872,7 +1878,7 @@ function renderMonthlyArchive() {
   const months = getAvailableMonths();
   if (!months.length) {
     dom.monthlyArchiveBody.innerHTML =
-      '<tr><td colspan="6" class="empty">저장된 월별 데이터가 없습니다.</td></tr>';
+      '<tr><td colspan="7" class="empty">저장된 월별 데이터가 없습니다.</td></tr>';
     return;
   }
 
@@ -1884,6 +1890,7 @@ function renderMonthlyArchive() {
         <td>${formatMonthLabel(row.month)}${selectedBadge}</td>
         <td>${row.employeeCount}</td>
         <td>${formatDurationText(row.totalHours)}</td>
+        <td>${formatDurationText(row.totalBonusHours)}</td>
         <td>${formatWon(row.totalGross)}</td>
         <td>${formatWon(row.totalNet)}</td>
         <td>
@@ -1900,16 +1907,18 @@ function buildMonthSnapshot(month) {
     (acc, name) => {
       const payroll = computeEmployeeMonthPayroll(name, month);
       acc.hours += payroll.totals.hours;
+      acc.bonusHours += payroll.totals.bonusHours;
       acc.gross += payroll.totals.grossPay;
       acc.net += payroll.totals.netPay;
       return acc;
     },
-    { hours: 0, gross: 0, net: 0 }
+    { hours: 0, bonusHours: 0, gross: 0, net: 0 }
   );
   return {
     month,
     employeeCount: employees.length,
     totalHours: round2(totals.hours),
+    totalBonusHours: round2(totals.bonusHours),
     totalGross: roundCurrency(totals.gross),
     totalNet: roundCurrency(totals.net),
   };
