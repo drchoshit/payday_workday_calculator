@@ -4,6 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "node local-server.js",
-    "start": "node local-server.js"
+    "start": "node shared-server.cjs",
+    "test": "node tests/scheduling.test.cjs && node tests/november-survey.test.cjs && node tests/shared-storage.test.cjs"
+  },
+  "dependencies": {
+    "pg": "^8.16.3"
   }
 }

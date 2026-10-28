@@ -56,6 +56,7 @@ const DEFAULT_CAREER_LEVELS = [
 
 const persisted = loadPersistedConfig();
 let bonusEditorOpen = false;
+let sharedStorage = null;
 
 const state = {
   settings: { ...DEFAULT_SETTINGS, ...(persisted.settings || {}) },
@@ -76,6 +77,8 @@ const state = {
   careerLevels: normalizeCareerLevels(persisted.careerLevels || []),
   careerMonth: cleanText(persisted.careerMonth || ""),
   managerProfiles: normalizeManagerProfiles(persisted.managerProfiles || {}),
+  monthlyManagerConditions: persisted.monthlyManagerConditions || {},
+  appliedUpdates: Array.isArray(persisted.appliedUpdates) ? persisted.appliedUpdates : [],
   selectedScheduleSlotId: cleanText(persisted.selectedScheduleSlotId || ""),
   uiDrafts: normalizeUiDrafts(persisted.uiDrafts || {}),
 };
@@ -230,6 +233,42 @@ function init() {
   renderMonthlyArchive();
   renderScheduleAi();
   renderCareer();
+  persistConfig();
+  initializeSharedStorage();
+}
+
+function initializeSharedStorage() {
+  if (!globalThis.PayrollSharedStorage || sharedStorage) return;
+  const status = document.getElementById('sharedSaveStatus');
+  sharedStorage = new globalThis.PayrollSharedStorage({
+    snapshot: buildPersistPayload,
+    restore(data) { restoreFromImportedData(data); renderEverything(); },
+    status(message, error = false) {
+      status.textContent = message;
+      status.classList.toggle('text-danger', error);
+    },
+  });
+  const endpoint = document.getElementById('sharedServerUrl');
+  endpoint.value = sharedStorage.endpoint;
+  document.getElementById('sharedConnectForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    const password = document.getElementById('sharedPassword');
+    try {
+      await sharedStorage.connect(endpoint.value.trim(), password.value);
+      password.value = '';
+    } catch(error) { status.textContent = error.message; status.classList.add('text-danger'); }
+  });
+  document.getElementById('sharedReloadBtn').addEventListener('click', () => {
+    if (window.confirm('이 컴퓨터의 현재 내용은 백업하고 공유 저장 내용을 불러옵니다. 계속하시겠습니까?')) {
+      sharedStorage.start({reload:true});
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') sharedStorage.flush(true);
+    else sharedStorage.refresh();
+  });
+  window.addEventListener('online', () => { sharedStorage.retry = null; sharedStorage.flush(); });
+  sharedStorage.start();
 }
 
 function bindEvents() {
@@ -408,6 +447,7 @@ function bindEvents() {
     dom.bonusHoursInput.focus();
   });
 
+  dom.bonusHoursInput.addEventListener("input", handleBonusHoursChange);
   dom.bonusHoursInput.addEventListener("change", handleBonusHoursChange);
 
   dom.statementBody.addEventListener("change", (event) => {
@@ -450,12 +490,13 @@ function persistBeforeUnload() {
   saveScheduleDraftFromInputs();
   applySelectedScheduleSlotFromInputs();
   persistConfig();
+  sharedStorage?.flush(true);
 }
 
 function bindSettingListeners() {
   const checkboxBindings = [["autoFillMissingInput", "autoFillMissing"]];
   checkboxBindings.forEach(([inputId, settingKey]) => {
-    dom[inputId].addEventListener("change", () => {
+    dom[inputId].addEventListener("input", () => {
       state.settings[settingKey] = dom[inputId].checked;
       persistConfig();
       renderStatement();
@@ -485,7 +526,7 @@ function bindSettingListeners() {
     ["nightEndTimeInput", "nightEndTime"],
   ];
   timeBindings.forEach(([inputId, settingKey]) => {
-    dom[inputId].addEventListener("change", () => {
+    dom[inputId].addEventListener("input", () => {
       state.settings[settingKey] = dom[inputId].value || DEFAULT_SETTINGS[settingKey];
       persistConfig();
       renderStatement();
@@ -1607,13 +1648,18 @@ function renderStatement() {
   renderStatementTotals(payroll);
 }
 
-function handleBonusHoursChange() {
+function handleBonusHoursChange(event) {
   if (!state.selectedMonth || !state.selectedEmployee) return;
   const bonusHours = Math.max(0, round2(toNumber(dom.bonusHoursInput.value, 0)));
   setBonusHours(state.selectedEmployee, state.selectedMonth, bonusHours);
   bonusEditorOpen = bonusHours > 0;
   persistConfig();
-  renderStatement();
+  if (event?.type === 'input') {
+    const payroll = computeEmployeeMonthPayroll(state.selectedEmployee, state.selectedMonth);
+    renderStatementTotals(payroll);
+    dom.bonusPayPreview.textContent = formatWon(payroll.totals.bonusPay);
+    dom.bonusPayFormula.textContent = `${formatDurationText(bonusHours)} × 시급 ${formatWon(ensureEmployeeSetting(state.selectedEmployee).hourlyRate)}`;
+  } else renderStatement();
   renderSummary();
   setStatus(
     `${formatMonthLabel(state.selectedMonth)} ${state.selectedEmployee}의 보너스 시간을 ${formatDurationText(
@@ -1941,7 +1987,68 @@ function handleMonthlyArchiveAction(event) {
   renderMonthlyArchive();
 }
 
+// Only November's availability and absence restrictions from the supplied survey.
+// Preferences about pay, frequency, December, and replacement staff are excluded.
+function applyNovemberSurvey() {
+  const update = '2026-11-survey-v1';
+  if (state.appliedUpdates.includes(update)) return;
+  const responses = [
+    {name:'김지원', slots:{'1T':[2,3,4,5,6], '2T':[4,5]}, evening:[3,4,5], blocked:[['03','06']]},
+    {name:'김진솔', slots:{'1T':[1,2,4], '2T':[1,2,4]}, evening:[3], blocked:[['12','12'],['16','16']],
+      windows:{'1:1T':{end:'15:00'}, '2:2T':{start:'16:00'}, '3:2T':{start:'19:00'}, '4:2T':{start:'16:00'}}},
+    {name:'장채민', slots:{'1T':[1,2,3]}, blocked:[['02','02'],['23','23']], fixed:true},
+    {name:'김민서', slots:{'1T':[5], '2T':[4]}, evening:[1,2],
+      windows:{'2026-11-12:2T':{start:'16:00'}, '2026-11-26:2T':{start:'16:00'}}},
+    {name:'유시우', slots:{'3T':[2,4,6]}},
+    {name:'이연승', slots:{'1T':[6,0], '2T':[2]}, evening:[1,2], blocked:[['11','14']]},
+    {name:'이영서', slots:{'1T':[0], '2T':[1]}},
+    {name:'김지연', slots:{'3T':[1,3,5]}},
+    {name:'임아영', slots:{'1T':[1,2,3,4,0], '2T':[0]}, blocked:[['21','30']]},
+    {name:'이유민', slots:{'1T':[2,3,5,0], '2T':[2,3,0]}, blocked:[['06','06'],['22','22']]},
+  ];
+  const monthly = state.monthlyManagerConditions['2026-11'] ||= {};
+  for (const response of responses) {
+    const existing = state.managerProfiles[response.name];
+    const base = ensureBaseManagerProfile(response.name);
+    const availability = {}, prioritySlots = normalizePrioritySlots(null), timeWindows = {};
+    for (let day=0; day<7; day++) {
+      availability[day] = Object.fromEntries(SHIFT_IDS.map(shift => [shift, false]));
+    }
+    for (const [shift, days] of Object.entries(response.slots)) {
+      for (const day of days) availability[day][shift] = true;
+    }
+    for (const day of response.evening || []) {
+      if (!availability[day]['2T']) timeWindows[day + ':2T'] = {start:'18:30', end:'22:30'};
+      availability[day]['2T'] = true;
+    }
+    Object.assign(timeWindows, response.windows || {});
+    if (response.fixed) for (const day of [1,2,3]) prioritySlots[day]['1T'] = true;
+    const previous = monthly[response.name] || {};
+    const cap = previous.weeklyMaximumShifts ?? (existing ? base.weeklyMaximumShifts : 7);
+    monthly[response.name] = {
+      ...previous, availability, prioritySlots, timeWindows,
+      weeklyMaximumShifts: response.fixed ? Math.max(3, cap) : cap,
+      weeklyDesiredShifts: response.fixed ? Math.max(3, cap) : cap,
+      desiredShifts: response.fixed ? Math.max(3, cap) : cap,
+      monthlyMinimumShifts: previous.monthlyMinimumShifts ?? base.monthlyMinimumShifts,
+      unavailableRanges: [
+        ...normalizeUnavailableRanges(previous.unavailableRanges || base.unavailableRanges)
+          .filter(range => range.end >= '2026-11-01' && range.start <= '2026-11-30'),
+        ...(response.blocked || []).map(([start,end]) => ({start:'2026-11-'+start, end:'2026-11-'+end})),
+      ].filter((range,index,list) => list.findIndex(other => other.start===range.start && other.end===range.end) === index),
+    };
+  }
+  state.appliedUpdates.push(update);
+  state.scheduleMonth = '2026-11';
+}
+
+function getManagerTimeWindow(name, weekday, shiftId, dateKey = '') {
+  const windows = ensureManagerProfile(name).timeWindows || {};
+  return windows[dateKey + ':' + shiftId] || windows[weekday + ':' + shiftId] || {};
+}
+
 function initializeAdvancedDefaults() {
+  applyNovemberSurvey();
   if (!state.scheduleTemplates.length) {
     state.scheduleTemplates = cloneDefaultShiftTemplates();
   }
@@ -2427,13 +2534,17 @@ function buildManagerConditionMatrixRow(name) {
       const available = Boolean(profile.availability?.[weekday]?.[shiftId]);
       const fixedPriority = available && Boolean(profile.prioritySlots?.[weekday]?.[shiftId]);
       const stateClass = fixedPriority ? " is-fixed" : available ? " is-available" : "";
-      const stateLabel = fixedPriority ? "최우선 고정" : available ? "근무 가능" : "근무 불가";
+      const timeWindow = getManagerTimeWindow(name, weekday, shiftId);
+      const timeLabel = available && (timeWindow.start || timeWindow.end)
+        ? ` (${timeWindow.start || '기본 출근'}~${timeWindow.end || '기본 퇴근'})` : '';
+      const stateLabel = (fixedPriority ? "최우선 고정" : available ? "근무 가능" : "근무 불가") + timeLabel;
       return `<td class="manager-weekly-availability-cell">
         <button class="matrix-shift-toggle-btn${stateClass}" aria-label="${escapeHtml(
           displayName
         )} ${WEEKDAYS[weekday]}요일 ${shiftId}: ${stateLabel}" title="${WEEKDAYS[weekday]}요일 ${shiftId} · ${stateLabel}"
           data-name="${escapeHtml(name)}" data-day="${weekday}" data-shift-id="${shiftId}" type="button">
           <span aria-hidden="true"></span>
+          ${timeLabel ? '<small class="partial-shift-label">시간제한</small>' : ''}
         </button>
       </td>`;
     }).join("");
@@ -2901,7 +3012,17 @@ function showSchedulePopup(message) {
   window.alert(message);
 }
 
+function withScheduleConditionMonth(month, callback) {
+  const previous = state.scheduleMonth;
+  state.scheduleMonth = month;
+  try { return callback(); } finally { state.scheduleMonth = previous; }
+}
+
 function buildAutoScheduleForMonth(month, managers, options = {}) {
+  return withScheduleConditionMonth(month, () => buildAutoScheduleForMonthInternal(month, managers, options));
+}
+
+function buildAutoScheduleForMonthInternal(month, managers, options = {}) {
   const slots = buildAutoScheduleSlots(month, options);
   const rows = slots.map(({dateKey, weekday, template, workerSlots}) => normalizeScheduleRow({
     id: 'sch-' + month + '-' + dateKey + '-' + template.id,
@@ -2965,8 +3086,9 @@ function buildAutoScheduleForMonth(month, managers, options = {}) {
   seats.forEach(({row, key, name}) => {
     row[key] = name;
     const prefix = key === 'primaryManager' ? 'primary' : 'secondary';
-    row[prefix + 'Start'] = name ? row.shiftStart : '';
-    row[prefix + 'End'] = name ? row.shiftEnd : '';
+    const window = name ? getManagerTimeWindow(name, row.weekday, row.shiftId, row.date) : {};
+    row[prefix + 'Start'] = name ? (window.start || row.shiftStart) : '';
+    row[prefix + 'End'] = name ? (window.end || row.shiftEnd) : '';
     if (name && row.source === '미배정') row.source = '자동배정';
   });
   return rows.sort(compareScheduleRows);
@@ -2981,6 +3103,20 @@ function getMonthlyMinimumWarnings(rows, managers) {
 }
 
 function buildWeeklyFixedScheduleForMonth(month, managers) {
+  return withScheduleConditionMonth(month, () => {
+    const rows = buildWeeklyFixedScheduleForMonthInternal(month, managers);
+    for (const row of rows) for (const prefix of ['primary', 'secondary']) {
+      const name = row[prefix + 'Manager'];
+      if (!name) continue;
+      const window = getManagerTimeWindow(name, row.weekday, row.shiftId, row.date);
+      row[prefix + 'Start'] = window.start || row.shiftStart;
+      row[prefix + 'End'] = window.end || row.shiftEnd;
+    }
+    return rows;
+  });
+}
+
+function buildWeeklyFixedScheduleForMonthInternal(month, managers) {
   const weeklyPattern = buildWeeklyFixedPattern(managers);
   const assignmentMap = createManagerAssignmentMap(managers);
   const rows = [];
@@ -4151,6 +4287,27 @@ function normalizePrioritySlots(value) {
 }
 
 function ensureManagerProfile(name) {
+  const base = ensureBaseManagerProfile(name);
+  const month = state.scheduleMonth;
+  if (!name || !/^\d{4}-\d{2}$/.test(month)) return base;
+  const fields = ['availability', 'prioritySlots', 'unavailableRanges', 'weeklyMaximumShifts',
+    'weeklyDesiredShifts', 'desiredShifts', 'monthlyMinimumShifts', 'timeWindows'];
+  const monthly = state.monthlyManagerConditions[month] ||= {};
+  const condition = monthly[cleanText(name)] ||= {};
+  for (const field of fields) {
+    if (!(field in condition)) condition[field] = JSON.parse(JSON.stringify(base[field] ?? {}));
+  }
+  return new Proxy(base, {
+    get(target, key) { return fields.includes(key) ? condition[key] : target[key]; },
+    set(target, key, value) {
+      if (fields.includes(key)) condition[key] = value;
+      else target[key] = value;
+      return true;
+    },
+  });
+}
+
+function ensureBaseManagerProfile(name) {
   const key = cleanText(name);
   if (!key) {
     return createDefaultManagerProfile();
@@ -5692,6 +5849,8 @@ function buildPersistPayload() {
     careerLevels: state.careerLevels,
     careerMonth: state.careerMonth,
     managerProfiles: state.managerProfiles,
+    monthlyManagerConditions: state.monthlyManagerConditions,
+    appliedUpdates: state.appliedUpdates,
     selectedScheduleSlotId: state.selectedScheduleSlotId,
     uiDrafts: state.uiDrafts,
   };
@@ -5864,6 +6023,8 @@ function restoreFromImportedData(data) {
   state.careerLevels = normalizeCareerLevels(data.careerLevels || []);
   state.careerMonth = cleanText(data.careerMonth || "");
   state.managerProfiles = normalizeManagerProfiles(data.managerProfiles || {});
+  state.monthlyManagerConditions = data.monthlyManagerConditions || {};
+  state.appliedUpdates = Array.isArray(data.appliedUpdates) ? data.appliedUpdates : [];
   state.selectedScheduleSlotId = cleanText(data.selectedScheduleSlotId || "");
   state.uiDrafts = normalizeUiDrafts(data.uiDrafts || {});
   applyDefaultWageMigration();
@@ -5905,6 +6066,7 @@ function applyDefaultWageMigration() {
 function persistConfig() {
   const payload = buildPersistPayload();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  sharedStorage?.changed();
 }
 
 function loadPersistedConfig() {

@@ -1,0 +1,20 @@
+# Optional shared server. The existing Static Site remains in render.yaml.
+# Connect an existing durable PostgreSQL database and choose a shared password.
+# This file does not provision a paid or expiring database automatically.
+services:
+  - type: web
+    name: payroll-shared-storage
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 22.17.0
+      - key: DATABASE_URL
+        sync: false
+      - key: SHARED_PASSWORD
+        sync: false
+      - key: ALLOWED_ORIGIN
+        value: https://payday-workday-calculator.onrender.com

@@ -6,6 +6,7 @@ vm.runInContext(fs.readFileSync('app.js','utf8').replace('init();',''),context);
 vm.runInContext(`
 function fixture() {
  state.managerProfiles = {};
+ state.monthlyManagerConditions = {};
  state.scheduleFixedRules = [];
  state.scheduleTemplates = DEFAULT_SHIFT_TEMPLATES;
  state.scheduleWeeklyHeadcounts = normalizeWeeklyHeadcounts(null);
