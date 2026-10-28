@@ -2439,9 +2439,23 @@ function renderScheduleManagerUnavailableCards() {
           <span>근무 곤란 기간</span>
         </div>
         ${buildUnavailableRangesCell(name, profile)}
+        ${buildManagerTimeRestrictionNotes(profile)}
       </section>`;
     })
     .join("");
+}
+
+function buildManagerTimeRestrictionNotes(profile) {
+  const notes = Object.entries(profile.timeWindows || {}).map(([key, window]) => {
+    const split = key.lastIndexOf(':');
+    const dateOrDay = key.slice(0, split), shift = key.slice(split + 1);
+    const label = /^\d{4}-\d{2}-\d{2}$/.test(dateOrDay)
+      ? dateOrDay : `매주 ${WEEKDAYS[Number(dateOrDay)]}요일`;
+    const restrictions = [window.start ? `${window.start}부터 출근 가능` : '',
+      window.end ? `${window.end}까지 근무 가능` : ''].filter(Boolean).join(' · ');
+    return `<li>${escapeHtml(label)} ${escapeHtml(shift)}: ${escapeHtml(restrictions)}</li>`;
+  });
+  return notes.length ? `<div class="hint">시간 제한<ul>${notes.join('')}</ul></div>` : '';
 }
 
 function renderScheduleManagerBasicCards() {
