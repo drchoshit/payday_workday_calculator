@@ -318,9 +318,7 @@ function bindEvents() {
       generateAutoSchedule({ mode: cleanText(button.dataset.autoMode) });
     });
   });
-  dom.generateWeeklyScheduleBtn?.addEventListener("click", () => {
-    generateAutoSchedule({ mode: "weekly-fixed" });
-  });
+
   dom.weeklyStaffingGrid?.addEventListener("input", handleWeeklyHeadcountInput);
   dom.weeklyStaffingGrid?.addEventListener("change", handleWeeklyHeadcountInput);
   dom.printScheduleBtn.addEventListener("click", printScheduleCalendar);
@@ -2366,6 +2364,7 @@ function buildManagerBasicCard(name) {
         <div class="manager-setting-group manager-basic-group">
           <div class="manager-setting-title"><b>1</b> 기본 배정</div>
           <div class="manager-basic-fields">
+            <label class="field"><span>월 최소 근무 횟수</span><input class="schedule-manager-monthly-minimum" aria-label="${escapeHtml(displayName)} 월 최소 근무 횟수" data-name="${escapeHtml(name)}" type="number" min="0" max="31" step="1" value="${profile.monthlyMinimumShifts}" /></label>
             <label class="field">
               <span>최대 주당 T</span>
               <input class="schedule-manager-weekly-maximum" aria-label="${escapeHtml(
@@ -2561,6 +2560,10 @@ function handleScheduleManagerInput(event) {
   if (!name) return;
   const profile = ensureManagerProfile(name);
 
+  if (target.classList.contains("schedule-manager-monthly-minimum")) {
+    profile.monthlyMinimumShifts = Math.max(0, Math.min(31, Math.round(toNumber(target.value, 0))));
+    if (event.type === "change") target.value = String(profile.monthlyMinimumShifts);
+  }
   if (target.classList.contains("schedule-manager-weekly-maximum")) {
     profile.weeklyMaximumShifts = Math.max(0, Math.min(7, Math.round(toNumber(target.value, 0))));
     profile.weeklyDesiredShifts = profile.weeklyMaximumShifts;
@@ -2899,71 +2902,82 @@ function showSchedulePopup(message) {
 }
 
 function buildAutoScheduleForMonth(month, managers, options = {}) {
-  if (options.mode === "weekly-fixed") {
-    return buildWeeklyFixedScheduleForMonth(month, managers);
-  }
-  const assignmentMap = createManagerAssignmentMap(managers);
   const slots = buildAutoScheduleSlots(month, options);
-  const rows = [];
-
-  slots.forEach(({ dateKey, weekday, template, workerSlots }) => {
-    const fixedRule = findFixedRule(dateKey, weekday, template.id);
-    const fixedManager =
-      fixedRule?.manager &&
-      isManagerAvailable(fixedRule.manager, dateKey, weekday, template.id) &&
-      isWithinAutoScheduleLimits(fixedRule.manager, dateKey, weekday, template.id, assignmentMap) &&
-      !isManagerAssignedOnDate(assignmentMap, fixedRule.manager, dateKey)
-        ? fixedRule.manager
-        : "";
-    const fixedApplied = Boolean(fixedManager);
-    let manager = fixedManager;
-    let secondaryManager = "";
-
-    if (!manager) {
-      manager = pickAutoManager(managers, dateKey, weekday, template.id, assignmentMap, new Set(), options);
-    }
-    const shiftHours = calculateTimeRangeHours(dateKey, template.start, template.end);
-    if (manager) {
-      recordManagerAssignment(assignmentMap, manager, dateKey, shiftHours, template.id);
-    }
-    if (workerSlots > 1) {
-      const excluded = new Set(manager ? [manager] : []);
-      secondaryManager = pickAutoManager(
-        managers,
-        dateKey,
-        weekday,
-        template.id,
-        assignmentMap,
-        excluded,
-        options
-      );
-      if (secondaryManager) {
-        recordManagerAssignment(assignmentMap, secondaryManager, dateKey, shiftHours, template.id);
-      }
-    }
-
-    rows.push(
-      normalizeScheduleRow({
-        id: `sch-${month}-${dateKey}-${template.id}-${Math.random().toString(36).slice(2, 7)}`,
-        date: dateKey,
-        weekday,
-        shiftId: template.id,
-        workerSlots,
-        shiftStart: template.start,
-        shiftEnd: template.end,
-        primaryManager: manager,
-        primaryStart: manager ? template.start : "",
-        primaryEnd: manager ? template.end : "",
-        secondaryManager,
-        secondaryStart: secondaryManager ? template.start : "",
-        secondaryEnd: secondaryManager ? template.end : "",
-        note: fixedApplied ? fixedRule?.note || "" : "",
-        source: fixedApplied ? "고정규칙" : manager ? "자동배정" : "미배정",
-      })
-    );
+  const rows = slots.map(({dateKey, weekday, template, workerSlots}) => normalizeScheduleRow({
+    id: 'sch-' + month + '-' + dateKey + '-' + template.id,
+    date: dateKey, weekday, shiftId: template.id, workerSlots,
+    shiftStart: template.start, shiftEnd: template.end, source: '미배정'
+  }));
+  const seats = rows.flatMap(row => Array.from({length: row.workerSlots}, (_, i) => ({row, key: i ? 'secondaryManager' : 'primaryManager', name: '', locked: false})));
+  const counts = name => seats.filter(seat => seat.name === name).length;
+  const assignmentMap = () => {
+    const map = createManagerAssignmentMap(managers);
+    seats.forEach(({row, name}) => {
+      if (name) recordManagerAssignment(map, name, row.date,
+        calculateTimeRangeHours(row.date, row.shiftStart, row.shiftEnd), row.shiftId);
+    });
+    return map;
+  };
+  const canAssign = (name, seat) => {
+    const map = assignmentMap(), row = seat.row;
+    return isManagerAvailable(name, row.date, row.weekday, row.shiftId) &&
+      !isManagerAssignedOnDate(map, name, row.date) &&
+      isWithinAutoScheduleLimits(name, row.date, row.weekday, row.shiftId, map);
+  };
+  // Reserve all stars before any ordinary shift consumes the daily or weekly limit.
+  seats.forEach(seat => {
+    const row = seat.row;
+    const name = pickAutoManager(managers.filter(name => isManagerPrioritySlot(name, row.weekday, row.shiftId)),
+      row.date, row.weekday, row.shiftId, assignmentMap(), new Set(), options);
+    if (name) { seat.name = name; seat.locked = true; row.source = '주간고정'; }
   });
-
+  seats.filter(seat => !seat.name).forEach(seat => {
+    const row = seat.row, rule = findFixedRule(row.date, row.weekday, row.shiftId);
+    if (rule && managers.includes(rule.manager) && canAssign(rule.manager, seat)) {
+      seat.name = rule.manager; seat.locked = true; row.source = '고정규칙'; row.note = rule.note || '';
+    }
+  });
+  const minimum = name => ensureManagerProfile(name).monthlyMinimumShifts;
+  seats.filter(seat => !seat.name).forEach(seat => {
+    const row = seat.row;
+    const eligible = managers.filter(name => canAssign(name, seat));
+    eligible.sort((a,b) => Math.max(0, minimum(b)-counts(b))-Math.max(0, minimum(a)-counts(a)));
+    const deficient = eligible.filter(name => counts(name) < minimum(name));
+    seat.name = pickAutoManager(deficient.length ? deficient : eligible,
+      row.date, row.weekday, row.shiftId, assignmentMap(), new Set(), options);
+  });
+  // Reassign flexible seats along a chain, preserving stars, rules and all hard limits.
+  function augment(name, visited = new Set()) {
+    for (const seat of seats) {
+      if (seat.locked || seat.name === name || visited.has(seat)) continue;
+      const previous = seat.name;
+      seat.name = '';
+      if (!canAssign(name, seat)) { seat.name = previous; continue; }
+      const snapshot = seats.map(item => item.name);
+      seat.name = name;
+      if (!previous || counts(previous) >= minimum(previous) || augment(previous, new Set([...visited, seat]))) return true;
+      seats.forEach((item, i) => { item.name = snapshot[i]; });
+      seat.name = previous;
+    }
+    return false;
+  }
+  managers.forEach(name => { while (counts(name) < minimum(name) && augment(name)) {} });
+  seats.forEach(({row, key, name}) => {
+    row[key] = name;
+    const prefix = key === 'primaryManager' ? 'primary' : 'secondary';
+    row[prefix + 'Start'] = name ? row.shiftStart : '';
+    row[prefix + 'End'] = name ? row.shiftEnd : '';
+    if (name && row.source === '미배정') row.source = '자동배정';
+  });
   return rows.sort(compareScheduleRows);
+}
+
+function getMonthlyMinimumWarnings(rows, managers) {
+  return managers.flatMap(name => {
+    const minimum = ensureManagerProfile(name).monthlyMinimumShifts;
+    const count = rows.filter(row => row.primaryManager === name || row.secondaryManager === name).length;
+    return count < minimum ? [name + ': 월 최소 ' + minimum + '회 중 ' + count + '회 배정 (' + (minimum-count) + '회 부족). 가능 일정·주간 한도·고정 배정을 확인하세요.'] : [];
+  });
 }
 
 function buildWeeklyFixedScheduleForMonth(month, managers) {
@@ -3445,26 +3459,12 @@ function isWithinAutoScheduleLimits(name, dateKey, weekday, shiftId, assignmentM
   const weeklyMaximum = getManagerWeeklyMaximum(name);
   if (weeklyMaximum <= 0 || weeklyAssigned >= weeklyMaximum) return false;
 
-  const preference = profile.fixedPreference;
-  if (preference.enabled) {
-    if (!preference.weekdays.includes(weekday)) return false;
-    const range = preference.shifts?.[shiftId];
-    if (!range || toNumber(range.max, 0) <= 0) return false;
-    return getWeeklyShiftAssignmentUnits(assignmentMap, name, weekKey, shiftId) < toNumber(range.max, 0);
-  }
   return true;
 }
 
 function isManagerAvailable(name, dateKey, weekday, shiftId) {
   const profile = ensureManagerProfile(name);
   if (isDateInUnavailableRanges(dateKey, profile.unavailableRanges)) return false;
-  const preference = profile.fixedPreference;
-  if (preference.enabled) {
-    return (
-      preference.weekdays.includes(weekday) &&
-      toNumber(preference.shifts?.[shiftId]?.max, 0) > 0
-    );
-  }
   ensureManagerProfileAvailability(profile, weekday);
   return Boolean(profile.availability?.[weekday]?.[shiftId]);
 }
@@ -4159,6 +4159,7 @@ function ensureManagerProfile(name) {
     state.managerProfiles[key] = createDefaultManagerProfile();
   }
   const profile = state.managerProfiles[key];
+  profile.monthlyMinimumShifts = Math.max(0, Math.min(31, Math.round(toNumber(profile.monthlyMinimumShifts, 0))));
   const weeklyMaximumSource =
     profile.weeklyMaximumShifts ?? profile.weeklyDesiredShifts ?? profile.desiredShifts;
   profile.weeklyMaximumShifts = Math.max(
@@ -4213,6 +4214,7 @@ function createDefaultManagerProfile() {
     desiredShifts: 0,
     weeklyMaximumShifts: 0,
     weeklyDesiredShifts: 0,
+    monthlyMinimumShifts: 0,
     priority: 5,
     pointPerShift: 1,
     baseMode: MANAGER_BASE_MODES.HOURS,
@@ -5556,6 +5558,7 @@ function normalizeManagerProfiles(value) {
       desiredShifts: weeklyMaximumShifts,
       weeklyMaximumShifts,
       weeklyDesiredShifts: weeklyMaximumShifts,
+      monthlyMinimumShifts: Math.max(0, Math.min(31, Math.round(toNumber(raw?.monthlyMinimumShifts, 0)))),
       priority: Math.max(1, Math.round(toNumber(raw?.priority, base.priority))),
       pointPerShift,
       baseMode,
