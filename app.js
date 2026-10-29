@@ -1987,20 +1987,18 @@ function handleMonthlyArchiveAction(event) {
   renderMonthlyArchive();
 }
 
-// Only November's availability and absence restrictions from the supplied survey.
+// Only November's full-shift availability and absence dates from the supplied survey.
 // Preferences about pay, frequency, December, and replacement staff are excluded.
 function applyNovemberSurvey() {
   const update = '2026-11-survey-v1';
-  if (state.appliedUpdates.includes(update)) return;
+  if (state.appliedUpdates.includes(update)) { applyNovemberFullShiftUpdate(); return; }
   const responses = [
-    {name:'김지원', slots:{'1T':[2,3,4,5,6], '2T':[4,5]}, evening:[3,4,5], blocked:[['03','06']]},
-    {name:'김진솔', slots:{'1T':[1,2,4], '2T':[1,2,4]}, evening:[3], blocked:[['12','12'],['16','16']],
-      windows:{'1:1T':{end:'15:00'}, '2:2T':{start:'16:00'}, '3:2T':{start:'19:00'}, '4:2T':{start:'16:00'}}},
+    {name:'김지원', slots:{'1T':[2,3,4,5,6], '2T':[4,5]}, blocked:[['03','06']]},
+    {name:'김진솔', slots:{'1T':[1,2,4], '2T':[1,2,4]}, blocked:[['12','12'],['16','16']]},
     {name:'장채민', slots:{'1T':[1,2,3]}, blocked:[['02','02'],['23','23']], fixed:true},
-    {name:'김민서', slots:{'1T':[5], '2T':[4]}, evening:[1,2],
-      windows:{'2026-11-12:2T':{start:'16:00'}, '2026-11-26:2T':{start:'16:00'}}},
+    {name:'김민서', slots:{'1T':[5], '2T':[4]}},
     {name:'유시우', slots:{'3T':[2,4,6]}},
-    {name:'이연승', slots:{'1T':[6,0], '2T':[2]}, evening:[1,2], blocked:[['11','14']]},
+    {name:'이연승', slots:{'1T':[6,0], '2T':[2]}, blocked:[['11','14']]},
     {name:'이영서', slots:{'1T':[0], '2T':[1]}},
     {name:'김지연', slots:{'3T':[1,3,5]}},
     {name:'임아영', slots:{'1T':[1,2,3,4,0], '2T':[0]}, blocked:[['21','30']]},
@@ -2017,11 +2015,6 @@ function applyNovemberSurvey() {
     for (const [shift, days] of Object.entries(response.slots)) {
       for (const day of days) availability[day][shift] = true;
     }
-    for (const day of response.evening || []) {
-      if (!availability[day]['2T']) timeWindows[day + ':2T'] = {start:'18:30', end:'22:30'};
-      availability[day]['2T'] = true;
-    }
-    Object.assign(timeWindows, response.windows || {});
     if (response.fixed) for (const day of [1,2,3]) prioritySlots[day]['1T'] = true;
     const previous = monthly[response.name] || {};
     const cap = previous.weeklyMaximumShifts ?? (existing ? base.weeklyMaximumShifts : 7);
@@ -2040,6 +2033,24 @@ function applyNovemberSurvey() {
   }
   state.appliedUpdates.push(update);
   state.scheduleMonth = '2026-11';
+  applyNovemberFullShiftUpdate();
+}
+
+function applyNovemberFullShiftUpdate() {
+  const update = '2026-11-full-shifts-v2';
+  if (state.appliedUpdates.includes(update)) return;
+  const monthly = state.monthlyManagerConditions['2026-11'] || {};
+  const eveningOnly = {'김지원':[3], '김진솔':[3], '김민서':[1,2], '이연승':[1]};
+  for (const name of ['김지원','김진솔','장채민','김민서','유시우','이연승','이영서','김지연','임아영','이유민']) {
+    const condition = monthly[name];
+    if (!condition) continue;
+    condition.timeWindows = {};
+    for (const day of eveningOnly[name] || []) {
+      if (condition.availability?.[day]) condition.availability[day]['2T'] = false;
+      if (condition.prioritySlots?.[day]) condition.prioritySlots[day]['2T'] = false;
+    }
+  }
+  state.appliedUpdates.push(update);
 }
 
 function getManagerTimeWindow(name, weekday, shiftId, dateKey = '') {
